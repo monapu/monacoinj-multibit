@@ -24,6 +24,8 @@ import java.io.OutputStream;
 import java.io.Serializable;
 import java.util.Map;
 
+import com.google.bitcoin.IsMultiBitClass;
+
 import static com.google.common.base.Preconditions.checkElementIndex;
 import static com.google.common.base.Preconditions.checkNotNull;
 
@@ -33,8 +35,9 @@ import static com.google.common.base.Preconditions.checkNotNull;
  * transaction as being a module which is wired up to others, the inputs of one have to be wired
  * to the outputs of another. The exceptions are coinbase transactions, which create new coins.
  */
-public class TransactionInput extends ChildMessage implements Serializable {
+public class TransactionInput extends ChildMessage implements Serializable, IsMultiBitClass {
     public static final long NO_SEQUENCE = 0xFFFFFFFFL;
+    public static final long NO_SEQUENCE_ALTERNATIVE = -1L;
     private static final long serialVersionUID = 2;
     public static final byte[] EMPTY_ARRAY = new byte[0];
 
@@ -149,7 +152,7 @@ public class TransactionInput extends ChildMessage implements Serializable {
     public boolean isCoinBase() {
         maybeParse();
         return outpoint.getHash().equals(Sha256Hash.ZERO_HASH) &&
-                outpoint.getIndex() == NO_SEQUENCE;
+                (outpoint.getIndex() == NO_SEQUENCE || outpoint.getIndex() == NO_SEQUENCE_ALTERNATIVE);
     }
 
     /**
@@ -360,7 +363,7 @@ public class TransactionInput extends ChildMessage implements Serializable {
     }
 
     public boolean hasSequence() {
-        return sequence != NO_SEQUENCE;
+        return (sequence != NO_SEQUENCE && sequence != NO_SEQUENCE_ALTERNATIVE);
     }
 
     /**
