@@ -31,11 +31,11 @@ public class IsMultiBitClassTest extends TestCase {
 
     @Test
     public void testIsMultiBitClass() throws ClassNotFoundException {
-        //checkClass("core.Transaction");
-        //checkClass("core.TransactionConfidence");
+        checkClass("core.Transaction");
+        checkClass("core.TransactionConfidence");
         checkClass("core.TransactionInput");
-        //checkClass("core.TransactionOutput");
-        //checkClass("core.Wallet");
+        checkClass("core.TransactionOutput");
+        checkClass("core.Wallet");
     }
 
     private void checkClass(String className) throws ClassNotFoundException {

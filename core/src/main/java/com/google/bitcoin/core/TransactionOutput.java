@@ -16,6 +16,7 @@
 
 package com.google.bitcoin.core;
 
+import com.google.bitcoin.IsMultiBitClass;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -26,13 +27,12 @@ import java.io.Serializable;
 import java.math.BigInteger;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static com.google.common.base.Preconditions.checkState;
 
 /**
  * A TransactionOutput message contains a scriptPubKey that controls who is able to spend its value. It is a sub-part
  * of the Transaction message.
  */
-public class TransactionOutput extends ChildMessage implements Serializable {
+public class TransactionOutput extends ChildMessage implements Serializable, IsMultiBitClass {
     private static final Logger log = LoggerFactory.getLogger(TransactionOutput.class);
     private static final long serialVersionUID = -590332479859256824L;
 
@@ -119,6 +119,7 @@ public class TransactionOutput extends ChildMessage implements Serializable {
         return scriptPubKey;
     }
 
+    @Override
     protected void parseLite() {
         // TODO: There is no reason to use BigInteger for values, they are always smaller than 21 million * COIN
         // The only reason to use BigInteger would be to properly read values from the reference implementation, however
@@ -129,6 +130,7 @@ public class TransactionOutput extends ChildMessage implements Serializable {
         length = cursor - offset + scriptLen;
     }
 
+    @Override
     void parse() throws ProtocolException {
         scriptBytes = readBytes(scriptLen);
     }
@@ -164,10 +166,8 @@ public class TransactionOutput extends ChildMessage implements Serializable {
     /**
      * Sets this objects availableForSpending flag to false and the spentBy pointer to the given input.
      * If the input is null, it means this output was signed over to somebody else rather than one of our own keys.
-     * @throws IllegalStateException if the transaction was already marked as spent.
      */
     public void markAsSpent(TransactionInput input) {
-        checkState(availableForSpending);
         availableForSpending = false;
         spentBy = input;
     }
@@ -223,6 +223,7 @@ public class TransactionOutput extends ChildMessage implements Serializable {
     /**
      * Returns a human readable debug string.
      */
+    @Override
     public String toString() {
         try {
             return "TxOut of " + Utils.bitcoinValueToFriendlyString(value) + " to " + getScriptPubKey().getToAddress()
