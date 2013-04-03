@@ -45,15 +45,16 @@ public class WalletProtobufSerializerTest {
     public void empty() throws Exception {
         // Check the base case of a wallet with one key and no transactions.
         Wallet wallet1 = roundTrip(myWallet);
-        assertEquals(0, wallet1.getTransactions(true).size());
-        assertEquals(BigInteger.ZERO, wallet1.getBalance());
-        assertArrayEquals(myKey.getPubKey(),
+
+        assertEquals("Wrong number of keys", 0, wallet1.getTransactions(true).size());
+        assertEquals("Wrong balance", BigInteger.ZERO, wallet1.getBalance());
+        assertArrayEquals("Wrong pubkey", myKey.getPubKey(),
                 wallet1.findKeyFromPubHash(myKey.getPubKeyHash()).getPubKey());
-        assertArrayEquals(myKey.getPrivKeyBytes(),
+        assertArrayEquals("Wrong privkey", myKey.getPrivKeyBytes(),
                 wallet1.findKeyFromPubHash(myKey.getPubKeyHash()).getPrivKeyBytes());
-        assertEquals(myKey.getCreationTimeSeconds(),
+        assertEquals("Wring creation time", myKey.getCreationTimeSeconds(),
                 wallet1.findKeyFromPubHash(myKey.getPubKeyHash()).getCreationTimeSeconds());
-        assertEquals(WALLET_DESCRIPTION, wallet1.getDescription());
+        assertEquals("Wrong description", WALLET_DESCRIPTION, wallet1.getDescription());
     }
 
     @Test
@@ -228,11 +229,16 @@ public class WalletProtobufSerializerTest {
     }
 
     private static Wallet roundTrip(Wallet wallet) throws Exception {
-        ByteArrayOutputStream output = new ByteArrayOutputStream();
-        //System.out.println(WalletProtobufSerializer.walletToText(wallet));
-        new WalletProtobufSerializer().writeWallet(wallet, output);
-        ByteArrayInputStream input = new ByteArrayInputStream(output.toByteArray());
-        return new WalletProtobufSerializer().readWallet(input);
+        try {
+            ByteArrayOutputStream output = new ByteArrayOutputStream();
+            // System.out.println(WalletProtobufSerializer.walletToText(wallet));
+            new WalletProtobufSerializer().writeWallet(wallet, output);
+            ByteArrayInputStream input = new ByteArrayInputStream(output.toByteArray());
+            return new WalletProtobufSerializer().readWallet(input);
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw e;
+        }
     }
 
 

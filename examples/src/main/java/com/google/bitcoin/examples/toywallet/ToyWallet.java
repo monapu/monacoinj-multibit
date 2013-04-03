@@ -156,7 +156,7 @@ public class ToyWallet {
         System.out.println("Send to: " + wallet.getKeys().get(0).toAddress(params));
         System.out.println(wallet);
 
-        wallet.autosaveToFile(walletFile, 500, TimeUnit.MILLISECONDS, null);
+        //wallet.autosaveToFile(walletFile, 500, TimeUnit.MILLISECONDS, null);
 
         File blockChainFile = new File("toy.blockchain");
         if (!blockChainFile.exists() && !freshWallet) {

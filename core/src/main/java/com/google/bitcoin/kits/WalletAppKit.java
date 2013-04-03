@@ -91,7 +91,7 @@ public class WalletAppKit extends AbstractIdleService {
             } else {
                 vWallet = new Wallet(params);
             }
-            if (vUseAutoSave) vWallet.autosaveToFile(vWalletFile, 1, TimeUnit.SECONDS, null);
+            //if (vUseAutoSave) vWallet.autosaveToFile(vWalletFile, 1, TimeUnit.SECONDS, null);
             vStore = new SPVBlockStore(params, vChainFile);
             vChain = new BlockChain(params, vWallet, vStore);
             vPeerGroup = new PeerGroup(params, vChain);

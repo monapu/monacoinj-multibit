@@ -21,6 +21,7 @@ import com.google.bitcoin.script.Script;
 import com.google.bitcoin.script.ScriptBuilder;
 import com.google.bitcoin.script.ScriptOpCodes;
 import com.google.common.base.Preconditions;
+import com.google.bitcoin.IsMultiBitClass;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.spongycastle.crypto.params.KeyParameter;
@@ -47,7 +48,7 @@ import static com.google.bitcoin.core.Utils.*;
  * sense for selling MP3s might not make sense for selling cars, or accepting payments from a family member. If you
  * are building a wallet, how to present confidence to your users is something to consider carefully.</p>
  */
-public class Transaction extends ChildMessage implements Serializable {
+public class Transaction extends ChildMessage implements Serializable, IsMultiBitClass {
     private static final Logger log = LoggerFactory.getLogger(Transaction.class);
     private static final long serialVersionUID = -8567546957352643140L;
     
@@ -165,6 +166,7 @@ public class Transaction extends ChildMessage implements Serializable {
     /**
      * Returns the transaction hash as you see them in the block explorer.
      */
+    @Override
     public Sha256Hash getHash() {
         if (hash == null) {
             byte[] bits = bitcoinSerialize();
@@ -416,11 +418,13 @@ public class Transaction extends ChildMessage implements Serializable {
         SINGLE,      // 3
     }
 
+    @Override
     protected void unCache() {
         super.unCache();
         hash = null;
     }
 
+    @Override
     protected void parseLite() throws ProtocolException {
 
         //skip this if the length has been provided i.e. the tx is not part of a block
@@ -479,6 +483,7 @@ public class Transaction extends ChildMessage implements Serializable {
         return cursor - offset + 4;
     }
 
+    @Override
     void parse() throws ProtocolException {
 
         if (parsed)
@@ -550,6 +555,7 @@ public class Transaction extends ChildMessage implements Serializable {
         return getConfidence().getDepthInBlocks() >= params.getSpendableCoinbaseDepth();
     }
 
+    @Override
     public String toString() {
         return toString(null);
     }
@@ -628,7 +634,7 @@ public class Transaction extends ChildMessage implements Serializable {
                     s.append(scriptPubKey);
                 }
                 s.append(" ");
-                s.append(bitcoinValueToFriendlyString(out.getValue()));
+                s.append(bitcoinValueToPlainString(out.getValue()));
                 s.append(" BTC");
                 if (!out.isAvailableForSpending()) {
                     s.append(" Spent");
@@ -1075,6 +1081,56 @@ public class Transaction extends ChildMessage implements Serializable {
     }
 
     /**
+     * returns whether this transaction was sent by this wallet
+     * 
+     * @param wallet
+     * @return
+     */
+    public boolean sent(Wallet wallet) {
+        for (TransactionInput in : inputs) {
+            if (isTransactionInputMine(in, wallet)) {
+                return true;
+            }
+        }
+        return false;
+    }
+    
+    /** Determine whether the transaction input is in the wallet */
+    public boolean isTransactionInputMine(TransactionInput transactionInput, Wallet wallet) {
+        try {
+            byte[] pubkey = transactionInput.getScriptSig().getPubKey();
+            return wallet.isPubKeyMine(pubkey);
+        } catch (ScriptException e) {
+            return false;
+        }
+    }
+
+    /**
+     * returns whether this transaction uses one of the wallet's keys
+     * 
+     * @param wallet
+     * @return
+     */
+    public boolean isMine(Wallet wallet) {
+        for (TransactionOutput output : this.outputs) {
+            // This is not thread safe as a key could be removed between the
+            // call to isMine and receive.
+            if (output.isMine(wallet)) {
+                return true;
+            }
+        }
+
+        for (TransactionInput input : this.inputs) {
+            // This is not thread safe as a key could be removed between the
+            // call to isPubKeyMine and receive.
+            if (isTransactionInputMine(input, wallet)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /*
      * Gets the count of regular SigOps in this transactions
      */
     public int getSigOpCount() throws ScriptException {
@@ -1174,5 +1230,80 @@ public class Transaction extends ChildMessage implements Serializable {
             return chain.estimateBlockTime((int)getLockTime());
         else
             return new Date(getLockTime()*1000);
+    }
+
+    /**
+     * Make the TransactionOutputs spendable This is used in an intrawallet
+     * transfer as what is spent from the senders's perspetive is avaiable to
+     * spend from the recipients.
+     */
+    public void markOutputsAsSpendable() {
+        if (outputs != null) {
+            for (TransactionOutput output : outputs) {
+                if (output != null) {
+                    output.markAsUnspent();
+                }
+            }
+        }
+    }
+    
+    /**
+     * Calculate the fee for a spend
+     * @param transaction Must be a spend as for a receive we do not have the connected output
+     * @return BigInteger containing fee
+     */
+    public BigInteger calculateFee(Wallet wallet) {
+        BigInteger totalOut = BigInteger.ZERO;    
+        BigInteger totalIn = BigInteger.ZERO;
+        for (TransactionInput input : getInputs()) {
+            // This input is taking value from an transaction in our wallet. To
+            // discover the value,
+            // we must find the connected transaction.
+            TransactionOutput connected = input.getConnectedOutput(wallet.unspent);
+            if (connected == null)
+                connected = input.getConnectedOutput(wallet.spent);
+            if (connected == null)
+                connected = input.getConnectedOutput(wallet.pending);
+            if (connected == null)
+                continue;
+            totalIn = totalIn.add(connected.getValue());
+        }
+        List<TransactionOutput> outputs = getOutputs();
+        for (TransactionOutput output : outputs) {
+            totalOut = totalOut.add(output.getValue());
+        }
+        
+        return totalIn.subtract(totalOut);
+    }
+    
+    /**
+     * Calculates the sum of the inputs that are spending coins with keys in the
+     * wallet. This requires the transactions sending coins to those keys to be
+     * in the wallet. This method will not attempt to download the blocks
+     * containing the input transactions if the key is in the wallet but the
+     * transactions are not.
+     * 
+     * This variant includes the change
+     * 
+     * @return sum in nanocoins.
+     */
+    public BigInteger getValueSentFromMeIncludingChange(Wallet wallet) throws ScriptException {
+        maybeParse();
+        // This is tested in WalletTest.
+        BigInteger v = BigInteger.ZERO;
+        for (TransactionInput input : inputs) {
+            // This input is taking value from an transaction in our wallet. To
+            // discover the value,
+            // we must find the connected transaction.
+            TransactionOutput connected = input.getConnectedOutput(wallet.unspent);
+            if (connected == null)
+                connected = input.getConnectedOutput(wallet.spent);
+            if (connected == null)
+                connected = input.getConnectedOutput(wallet.pending);
+            if (connected == null)
+                continue;
+            v = v.add(connected.getValue());
+        }
+        return v;
     }
 }

@@ -578,7 +578,7 @@ public class WalletTool {
             chain = new FullPrunedBlockChain(params, wallet, s);
         }
         // This will ensure the wallet is saved when it changes.
-        wallet.autosaveToFile(walletFile, 200, TimeUnit.MILLISECONDS, null);
+        //wallet.autosaveToFile(walletFile, 200, TimeUnit.MILLISECONDS, null);
         peers = new PeerGroup(params, chain);
         peers.setUserAgent("WalletTool", "1.0");
         peers.addWallet(wallet);
