@@ -18,6 +18,9 @@ package com.google.bitcoin.core;
 
 import com.google.bitcoin.crypto.KeyCrypterScrypt;
 import org.bitcoinj.wallet.Protos.Wallet.EncryptionType;
+import com.google.bitcoin.IsMultiBitClass;
+import org.multibit.store.MultiBitWalletProtobufSerializer;
+import org.multibit.store.MultiBitWalletVersion;
 import org.spongycastle.crypto.params.KeyParameter;
 
 import com.google.bitcoin.core.TransactionConfidence.ConfidenceType;
@@ -38,6 +41,7 @@ import org.slf4j.LoggerFactory;
 import java.io.*;
 import java.math.BigInteger;
 import java.util.*;
+import java.util.Map.Entry;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.DelayQueue;
 import java.util.concurrent.Delayed;
@@ -81,7 +85,7 @@ import static com.google.common.base.Preconditions.*;
  * {@link Wallet#autosaveToFile(java.io.File, long, java.util.concurrent.TimeUnit, com.google.bitcoin.core.Wallet.AutosaveEventListener)}
  * for more information about this.</p>
  */
-public class Wallet implements Serializable, BlockChainListener {
+public class Wallet implements Serializable, BlockChainListener, IsMultiBitClass {
     private static final Logger log = LoggerFactory.getLogger(Wallet.class);
     private static final long serialVersionUID = 2L;
 
@@ -182,22 +186,12 @@ public class Wallet implements Serializable, BlockChainListener {
      */
     public ArrayList<ECKey> keychain;
 
-    private final NetworkParameters params;
+    private NetworkParameters params;
 
     private Sha256Hash lastBlockSeenHash;
     private int lastBlockSeenHeight = -1;
 
     private transient CopyOnWriteArrayList<WalletEventListener> eventListeners;
-
-    // Auto-save code. This all should be generalized in future to not be file specific so you can easily store the
-    // wallet into a database using the same mechanism. However we need to inform stores of each specific change with
-    // some objects representing those changes, which is more complex. To avoid poor performance in 0.6 on phones that
-    // have a lot of transactions in their wallet, we use the simpler approach. It's needed because the wallet stores
-    // the number of confirmations and accumulated work done for each transaction, so each block changes each tx.
-    private transient File autosaveToFile;
-    private transient boolean dirty;  // Is a write of the wallet necessary?
-    private transient AutosaveEventListener autosaveEventListener;
-    private transient long autosaveDelayMs;
 
     // A listener that relays confidence changes from the transaction confidence object to the wallet event listener,
     // as a convenience to API users so they don't have to register on every transaction themselves.
@@ -299,12 +293,18 @@ public class Wallet implements Serializable, BlockChainListener {
 
     // The keyCrypter for the wallet. This specifies the algorithm used for encrypting and decrypting the private keys.
     private KeyCrypter keyCrypter;
-    // The wallet version. This is an int that can be used to track breaking changes in the wallet format.
-    // You can also use it to detect wallets that come from the future (ie they contain features you
-    // do not know how to deal with).
-    private int version;
-    // User-provided description that may help people keep track of what a wallet is for.
-    private String description;
+
+    /**
+     * The wallet version. This can be used to track breaking changes in the wallet format.
+     * You can also use it to detect wallets that come from the future (ie they contain features you
+     * do not know how to deal with).
+     */
+    MultiBitWalletVersion version;
+
+    /**
+     * A description for the wallet.
+     */
+    String description;
 
     /**
      * Creates a new, empty wallet with no keys and no transactions. If you want to restore a wallet from disk instead,
@@ -351,10 +351,20 @@ public class Wallet implements Serializable, BlockChainListener {
                 lock.unlock();
             }
         };
+        coinSelector = new DefaultCoinSelector();
         acceptTimeLockedTransactions = false;
     }
 
     public NetworkParameters getNetworkParameters() {
+        return params;
+    }
+    
+    public void setNetworkParameters(NetworkParameters params) {
+        this.params = params;
+    }
+    
+    /** Returns the parameters this wallet was created with. */
+    public NetworkParameters getParams() {
         return params;
     }
 
@@ -369,7 +379,17 @@ public class Wallet implements Serializable, BlockChainListener {
             lock.unlock();
         }
     }
-    
+    /**
+     * Returns a snapshot of the keychain. This view is live.
+     */
+    public List<ECKey> getKeychain() {
+        lock.lock();
+        try {
+            return keychain;
+        } finally {
+            lock.unlock();
+        }
+    }
     /**
      * Returns the number of keys in the keychain.
      */
@@ -382,10 +402,17 @@ public class Wallet implements Serializable, BlockChainListener {
         }
     }
 
-    private void saveToFile(File temp, File destFile) throws IOException {
+    /**
+     * Uses protobuf serialization to save the wallet to the given file. To learn more about this file format, see
+     * {@link WalletProtobufSerializer}.
+     * 
+     * This method is keep simple as the file saving lifecycle is dealt with in FileHandler.
+     */
+    public synchronized void saveToFile(File destFile) throws IOException {        
         FileOutputStream stream = null;
+
         try {
-            stream = new FileOutputStream(temp);
+            stream = new FileOutputStream(destFile);
             saveToFileStream(stream);
             // Attempt to force the bits to hit the disk. In reality the OS or hard disk itself may still decide
             // to not write through to physical media for at least a few seconds, but this is the best we can do.
@@ -393,43 +420,11 @@ public class Wallet implements Serializable, BlockChainListener {
             stream.getFD().sync();
             stream.close();
             stream = null;
-            if (Utils.isWindows()) {
-                // Work around an issue on Windows whereby you can't rename over existing files.
-                File canonical = destFile.getCanonicalFile();
-                canonical.delete();
-                if (temp.renameTo(canonical))
-                    return;  // else fall through.
-                throw new IOException("Failed to rename " + temp + " to " + canonical);
-            } else if (!temp.renameTo(destFile)) {
-                throw new IOException("Failed to rename " + temp + " to " + destFile);
-            }
-            lock.lock();
-            try {
-                if (destFile.equals(autosaveToFile)) {
-                    dirty = false;
-                }
-            } finally {
-                lock.unlock();
-            }
         } finally {
             if (stream != null) {
                 stream.close();
             }
-            if (temp.delete()) {
-                log.warn("Deleted temp file after failed save.");
-            }
         }
-    }
-
-    /**
-     * Uses protobuf serialization to save the wallet to the given file. To learn more about this file format, see
-     * {@link WalletProtobufSerializer}. Writes out first to a temporary file in the same directory and then renames
-     * once written.
-     */
-    public void saveToFile(File f) throws IOException {
-        File directory = f.getAbsoluteFile().getParentFile();
-        File temp = File.createTempFile("wallet", null, directory);
-        saveToFile(temp, f);
     }
 
     /**
@@ -464,233 +459,6 @@ public class Wallet implements Serializable, BlockChainListener {
         }
     }
 
-    // Auto-saving can be done on a background thread if the user wishes it, this is to avoid stalling threads calling
-    // into the wallet on serialization/disk access all the time which is important in GUI apps where you don't want
-    // the main thread to ever wait on disk (otherwise you lose a lot of responsiveness). The primary case where it
-    // can be a problem is during block chain syncup - the wallet has to be saved after every block to record where
-    // it got up to and for updating the transaction confidence data, which can slow down block chain download a lot.
-    // So this thread not only puts the work of saving onto a background thread but also coalesces requests together.
-    private static class AutosaveThread extends Thread {
-        private static DelayQueue<AutosaveThread.WalletSaveRequest> walletRefs = new DelayQueue<WalletSaveRequest>();
-        private static AutosaveThread globalThread;
-
-        private AutosaveThread() {
-            // Allow the JVM to shut down without waiting for this thread. Note this means users could lose auto-saves
-            // if they don't explicitly save the wallet before terminating!
-            setDaemon(true);
-            setName("Wallet auto save thread");
-            setPriority(Thread.MIN_PRIORITY);   // Avoid competing with the UI.
-        }
-
-        /** Returns the global instance that services all wallets. It never shuts down. */
-        public static void maybeStart() {
-            if (walletRefs.size() == 0) return;
-
-            synchronized (AutosaveThread.class) {
-                if (globalThread == null) {
-                    globalThread = new AutosaveThread();
-                    globalThread.start();
-                }
-            }
-        }
-
-        /** Called by a wallet when it's become dirty (changed). Will start the background thread if needed. */
-        public static void registerForSave(Wallet wallet, long delayMsec) {
-            walletRefs.add(new WalletSaveRequest(wallet, delayMsec));
-            maybeStart();
-        }
-
-        public void run() {
-            log.info("Auto-save thread starting up");
-            while (true) {
-                try {
-                    WalletSaveRequest req = walletRefs.poll(5, TimeUnit.SECONDS);
-                    if (req == null) {
-                        if (walletRefs.size() == 0) {
-                            // No work to do for the given delay period, so let's shut down and free up memory.
-                            // We'll get started up again if a wallet changes once more.
-                            break;
-                        } else {
-                            // There's work but nothing to do just yet. Go back to sleep and try again.
-                            continue;
-                        }
-                    }
-
-                    req.wallet.lock.lock();
-                    try {
-                        if (req.wallet.dirty) {
-                            if (req.wallet.autoSave()) {
-                                // Something went wrong, abort!
-                                break;
-                            }
-                        }
-                    } finally {
-                        req.wallet.lock.unlock();
-                    }
-                } catch (InterruptedException e) {
-                    log.error("Auto-save thread interrupted during wait", e);
-                    break;
-                }
-            }
-            log.info("Auto-save thread shutting down");
-            synchronized (AutosaveThread.class) {
-                Preconditions.checkState(globalThread == this);   // There should only be one global thread.
-                globalThread = null;
-            }
-            // There's a possible shutdown race where work is added after we decided to shutdown but before
-            // we cleared globalThread.
-            maybeStart();
-        }
-
-        private static class WalletSaveRequest implements Delayed {
-            public final Wallet wallet;
-            public final long startTimeMs, requestedDelayMs;
-
-            public WalletSaveRequest(Wallet wallet, long requestedDelayMs) {
-                this.startTimeMs = System.currentTimeMillis();
-                this.requestedDelayMs = requestedDelayMs;
-                this.wallet = wallet;
-            }
-
-            public long getDelay(TimeUnit timeUnit) {
-                long delayRemainingMs = requestedDelayMs - (System.currentTimeMillis() - startTimeMs);
-                return timeUnit.convert(delayRemainingMs, TimeUnit.MILLISECONDS);
-            }
-
-            public int compareTo(Delayed delayed) {
-                if (delayed == this) return 0;
-                long delta = getDelay(TimeUnit.MILLISECONDS) - delayed.getDelay(TimeUnit.MILLISECONDS);
-                return (delta > 0 ? 1 : (delta < 0 ? -1 : 0));
-            }
-
-            @Override
-            public boolean equals(Object obj) {
-                if (!(obj instanceof WalletSaveRequest)) return false;
-                WalletSaveRequest w = (WalletSaveRequest) obj;
-                return w.startTimeMs == startTimeMs &&
-                       w.requestedDelayMs == requestedDelayMs &&
-                       w.wallet == wallet;
-            }
-
-            @Override
-            public int hashCode() {
-                return Objects.hashCode(wallet, startTimeMs, requestedDelayMs);
-            }
-        }
-    }
-
-    /** Returns true if the auto-save thread should abort */
-    private boolean autoSave() {
-        lock.lock();
-        final Sha256Hash lastBlockSeenHash = this.lastBlockSeenHash;
-        final AutosaveEventListener autosaveEventListener = this.autosaveEventListener;
-        final File autosaveToFile = this.autosaveToFile;
-        lock.unlock();
-        try {
-            log.info("Auto-saving wallet, last seen block is {}", lastBlockSeenHash);
-            File directory = autosaveToFile.getAbsoluteFile().getParentFile();
-            File temp = File.createTempFile("wallet", null, directory);
-            if (autosaveEventListener != null)
-                autosaveEventListener.onBeforeAutoSave(temp);
-            // This will clear the dirty flag.
-            saveToFile(temp, autosaveToFile);
-            if (autosaveEventListener != null)
-                autosaveEventListener.onAfterAutoSave(autosaveToFile);
-        } catch (Exception e) {
-            if (autosaveEventListener != null && autosaveEventListener.caughtException(e))
-                return true;
-            else
-                throw new RuntimeException(e);
-        }
-        return false;
-    }
-
-    /**
-     * Implementors can handle exceptions thrown during wallet auto-save, and to do pre/post treatment of the wallet.
-     */
-    public interface AutosaveEventListener {
-        /**
-         * Called on the auto-save thread if an exception is caught whilst saving the wallet.
-         * @return if true, terminates the auto-save thread. Otherwise sleeps and then tries again.
-         */
-        public boolean caughtException(Throwable t);
-
-        /**
-         * Called on the auto-save thread when a new temporary file is created but before the wallet data is saved
-         * to it. If you want to do something here like adjust permissions, go ahead and do so. The wallet is locked
-         * whilst this method is run.
-         */
-        public void onBeforeAutoSave(File tempFile);
-
-        /**
-         * Called on the auto-save thread after the newly created temporary file has been filled with data and renamed.
-         * The wallet is locked whilst this method is run.
-         */
-        public void onAfterAutoSave(File newlySavedFile);
-    }
-
-    /**
-     * <p>Sets up the wallet to auto-save itself to the given file, using temp files with atomic renames to ensure
-     * consistency. After connecting to a file, you no longer need to save the wallet manually, it will do it
-     * whenever necessary. Protocol buffer serialization will be used.</p>
-     *
-     * <p>If delayTime is set, a background thread will be created and the wallet will only be saved to
-     * disk every so many time units. If no changes have occurred for the given time period, nothing will be written.
-     * In this way disk IO can be rate limited. It's a good idea to set this as otherwise the wallet can change very
-     * frequently, eg if there are a lot of transactions in it or during block sync, and there will be a lot of redundant
-     * writes. Note that when a new key is added, that always results in an immediate save regardless of
-     * delayTime. <b>You should still save the wallet manually when your program is about to shut down as the JVM
-     * will not wait for the background thread.</b></p>
-     *
-     * <p>An event listener can be provided. If a delay >0 was specified, it will be called on a background thread
-     * with the wallet locked when an auto-save occurs. If delay is zero or you do something that always triggers
-     * an immediate save, like adding a key, the event listener will be invoked on the calling threads.</p>
-     *
-     * @param f The destination file to save to.
-     * @param delayTime How many time units to wait until saving the wallet on a background thread.
-     * @param timeUnit the unit of measurement for delayTime.
-     * @param eventListener callback to be informed when the auto-save thread does things, or null
-     */
-    public void autosaveToFile(File f, long delayTime, TimeUnit timeUnit,
-                               AutosaveEventListener eventListener) {
-        lock.lock();
-        try {
-            Preconditions.checkArgument(delayTime >= 0);
-            autosaveToFile = Preconditions.checkNotNull(f);
-            if (delayTime > 0) {
-                autosaveEventListener = eventListener;
-                autosaveDelayMs = TimeUnit.MILLISECONDS.convert(delayTime, timeUnit);
-            }
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    private void queueAutoSave() {
-        lock.lock();
-        try {
-            if (this.autosaveToFile == null) return;
-            if (autosaveDelayMs == 0) {
-                // No delay time was specified, so save now.
-                try {
-                    saveToFile(autosaveToFile);
-                } catch (IOException e) {
-                    throw new RuntimeException(e);
-                }
-            } else {
-                // If we need to, tell the auto save thread to wake us up. This will start the background thread if one
-                // doesn't already exist. It will wake up once the delay expires and call autoSave().
-                // The background thread is shared between all wallets.
-                if (!dirty) {
-                    dirty = true;
-                    AutosaveThread.registerForSave(this, autosaveDelayMs);
-                }
-            }
-        } finally {
-            lock.unlock();
-        }
-    }
-
     /**
      * Uses protobuf serialization to save the wallet to the given file stream. To learn more about this file format, see
      * {@link WalletProtobufSerializer}.
@@ -698,15 +466,10 @@ public class Wallet implements Serializable, BlockChainListener {
     public void saveToFileStream(OutputStream f) throws IOException {
         lock.lock();
         try {
-            new WalletProtobufSerializer().writeWallet(this, f);
+            new MultiBitWalletProtobufSerializer().writeWallet(this, f);
         } finally {
             lock.unlock();
         }
-    }
-
-    /** Returns the parameters this wallet was created with. */
-    public NetworkParameters getParams() {
-        return params;
     }
 
     /**
@@ -794,7 +557,8 @@ public class Wallet implements Serializable, BlockChainListener {
                 if (ois != null) ois.close();
             }
         } else {
-            wallet = new WalletProtobufSerializer().readWallet(stream);
+            MultiBitWalletProtobufSerializer walletProtobufSerializer = new MultiBitWalletProtobufSerializer();
+            wallet = walletProtobufSerializer.readWallet(stream);
         }
         
         if (!wallet.isConsistent()) {
@@ -878,9 +642,9 @@ public class Wallet implements Serializable, BlockChainListener {
             BigInteger valueSentToMe = tx.getValueSentToMe(this);
             BigInteger valueSentFromMe = tx.getValueSentFromMe(this);
             if (log.isInfoEnabled()) {
-                log.info(String.format("Received a pending transaction %s that spends %s BTC from our own wallet," +
+                log.info(String.format("Received a pending transaction %s that spends %s BTC from our own wallet (%s)," +
                         " and sends us %s BTC", tx.getHashAsString(), Utils.bitcoinValueToFriendlyString(valueSentFromMe),
-                        Utils.bitcoinValueToFriendlyString(valueSentToMe)));
+                        getDescription(), Utils.bitcoinValueToFriendlyString(valueSentToMe)));
             }
             if (tx.getConfidence().getSource().equals(TransactionConfidence.Source.UNKNOWN)) {
                 log.warn("Wallet received transaction with an unknown source. Consider tagging tx!");
@@ -926,7 +690,7 @@ public class Wallet implements Serializable, BlockChainListener {
      * risky it is. If this method returns true then {@link Wallet#receivePending(Transaction, java.util.List)}
      * will soon be called with the transactions dependencies as well.
      */
-    boolean isPendingTransactionRelevant(Transaction tx) throws ScriptException {
+    public boolean isPendingTransactionRelevant(Transaction tx) throws ScriptException {
         lock.lock();
         try {
             // Ignore it if we already know about this transaction. Receiving a pending transaction never moves it
@@ -941,7 +705,6 @@ public class Wallet implements Serializable, BlockChainListener {
             //   - Send us coins
             //   - Spend our coins
             if (!isTransactionRelevant(tx)) {
-                log.debug("Received tx that isn't relevant to this wallet, discarding.");
                 return false;
             }
 
@@ -950,6 +713,8 @@ public class Wallet implements Serializable, BlockChainListener {
                         tx.getHashAsString(), tx.getLockTime());
                 return false;
             }
+            log.debug("Saw relevant pending transaction " + tx.toString());
+
             return true;
         } finally {
             lock.unlock();
@@ -964,10 +729,11 @@ public class Wallet implements Serializable, BlockChainListener {
      * <p>Note that if the tx has inputs containing one of our keys, but the connected transaction is not in the wallet,
      * it will not be considered relevant.</p>
      */
+    @Override
     public boolean isTransactionRelevant(Transaction tx) throws ScriptException {
         lock.lock();
         try {
-            return tx.getValueSentFromMe(this).compareTo(BigInteger.ZERO) > 0 ||
+            return tx.isMine(this) || tx.getValueSentFromMe(this).compareTo(BigInteger.ZERO) > 0 ||
                    tx.getValueSentToMe(this).compareTo(BigInteger.ZERO) > 0 ||
                    checkForDoubleSpendAgainstPending(tx, false);
         } finally {
@@ -1055,6 +821,18 @@ public class Wallet implements Serializable, BlockChainListener {
             log.info("Received tx {} for {} BTC: {}", new Object[]{sideChain ? "on a side chain" : "",
                     bitcoinValueToFriendlyString(valueDifference), tx.getHashAsString()});
         }
+        
+        // If the transaction is already in our spent or unspent or there is no money in it it is probably
+        // due to a block replay so we do not want to do anything with it.
+        // If it is on a sidechain then let the ELSE below deal with it
+        // If it is a double spend it gets processed later.
+//        Transaction doubleSpend = findDoubleSpendAgainstPending(tx);
+//        boolean alreadyHaveIt = spent.containsKey(tx.getHash()) || unspent.containsKey(tx.getHash());
+//        boolean noMoneyInItAndNotMine = BigInteger.ZERO.equals(valueSentFromMe) && BigInteger.ZERO.equals(valueSentToMe) && !tx.isMine(this);
+//        if (bestChain && (doubleSpend == null) && (alreadyHaveIt || noMoneyInItAndNotMine)) {
+//            log.info("Already have tx " + tx.getHash() + " in spent/ unspent or there is no money in it and it is not mine so ignoring");
+//            return;
+//        }
 
         onWalletChangedSuppressions++;
 
@@ -1163,7 +941,6 @@ public class Wallet implements Serializable, BlockChainListener {
         onWalletChangedSuppressions--;
 
         checkState(isConsistent());
-        queueAutoSave();
     }
 
     /**
@@ -1199,7 +976,6 @@ public class Wallet implements Serializable, BlockChainListener {
                     tx.getConfidence().notifyWorkDone(block.getHeader());
                 }
             }
-            queueAutoSave();
             onWalletChangedSuppressions--;
             invokeOnWalletChanged();
         } finally {
@@ -1399,6 +1175,9 @@ public class Wallet implements Serializable, BlockChainListener {
      * like receiving money.
      */
     public void addEventListener(WalletEventListener listener) {
+        if (eventListeners == null) {
+            eventListeners = new CopyOnWriteArrayList<WalletEventListener>();
+        }
         eventListeners.add(listener);
     }
 
@@ -1418,12 +1197,13 @@ public class Wallet implements Serializable, BlockChainListener {
      *     <li>When we have just successfully transmitted the tx we created to the network.</li>
      *     <li>When we receive a pending transaction that didn't appear in the chain yet, and we did not create it.</li>
      * </ol>
-     *
-     * <p>Triggers an auto save.</p>
      */
     public void commitTx(Transaction tx) throws VerificationException {
         lock.lock();
         try {
+            if (tx == null) {
+                throw new IllegalArgumentException("tx cannot be null");
+            }
             checkArgument(!pending.containsKey(tx.getHash()), "commitTx called on the same transaction twice");
             log.info("commitTx of {}", tx.getHashAsString());
             BigInteger balance = getBalance();
@@ -1454,7 +1234,6 @@ public class Wallet implements Serializable, BlockChainListener {
             }
 
             checkState(isConsistent());
-            queueAutoSave();
         } finally {
             lock.unlock();
         }
@@ -1540,23 +1319,23 @@ public class Wallet implements Serializable, BlockChainListener {
         checkState(lock.isLocked());
         switch (pool) {
         case UNSPENT:
-            Preconditions.checkState(unspent.put(tx.getHash(), tx) == null);
+            unspent.put(tx.getHash(), tx);
             break;
         case SPENT:
-            Preconditions.checkState(spent.put(tx.getHash(), tx) == null);
+            spent.put(tx.getHash(), tx);
             break;
         case PENDING:
-            Preconditions.checkState(pending.put(tx.getHash(), tx) == null);
+            pending.put(tx.getHash(), tx);
             break;
         case DEAD:
-            Preconditions.checkState(dead.put(tx.getHash(), tx) == null);
+            dead.put(tx.getHash(), tx);
             break;
         case INACTIVE:
-            Preconditions.checkState(inactive.put(tx.getHash(), tx) == null);
+            inactive.put(tx.getHash(), tx);
             break;
         case PENDING_INACTIVE:
-            Preconditions.checkState(pending.put(tx.getHash(), tx) == null);
-            Preconditions.checkState(inactive.put(tx.getHash(), tx) == null);
+            pending.put(tx.getHash(), tx);
+            inactive.put(tx.getHash(), tx);
             break;
         default:
             throw new RuntimeException("Unknown wallet transaction type " + pool);
@@ -1636,7 +1415,6 @@ public class Wallet implements Serializable, BlockChainListener {
     /**
      * Deletes transactions which appeared above the given block height from the wallet, but does not touch the keys.
      * This is useful if you have some keys and wish to replay the block chain into the wallet in order to pick them up.
-     * Triggers auto saving.
      */
     public void clearTransactions(int fromHeight) {
         lock.lock();
@@ -1647,7 +1425,6 @@ public class Wallet implements Serializable, BlockChainListener {
                 pending.clear();
                 inactive.clear();
                 dead.clear();
-                queueAutoSave();
             } else {
                 throw new UnsupportedOperationException();
             }
@@ -1987,6 +1764,9 @@ public class Wallet implements Serializable, BlockChainListener {
             // the transaction is confirmed.
             req.tx.getConfidence().setSource(TransactionConfidence.Source.SELF);
 
+          // Keep a track of the date the tx was created (used in MultiBitService
+          // to work out the block it appears in).
+          req.tx.setUpdateTime(new Date());
             req.completed = true;
             log.info("  completed {} with {} inputs", req.tx.getHashAsString(), req.tx.getInputs().size());
             return true;
@@ -2013,11 +1793,18 @@ public class Wallet implements Serializable, BlockChainListener {
     Address getChangeAddress() {
         lock.lock();
         try {
-            // For now let's just pick the first key in our keychain. In future we might want to do something else to
+            // For now let's just pick the second key in our keychain. In future we might want to do something else to
             // give the user better privacy here, eg in incognito mode.
+            // The second key is chosen rather than the first because, by default, a wallet is created with a 
+            // single key. If the user imports say a blockchain.info backup they typically want change to go
+            // to one of the imported keys
             checkState(keychain.size() > 0, "Can't send value without an address to use for receiving change");
-            ECKey first = keychain.get(0);
-            return first.toAddress(params);
+            ECKey change = keychain.get(0);
+            
+            if (keychain.size() > 1) {
+                change = keychain.get(1);
+            }
+            return change.toAddress(params);
         } finally {
             lock.unlock();
         }
@@ -2057,9 +1844,6 @@ public class Wallet implements Serializable, BlockChainListener {
                 }
                 keychain.add(key);
                 added++;
-            }
-            if (autosaveToFile != null) {
-                autoSave();
             }
         } finally {
             lock.unlock();
@@ -2687,6 +2471,55 @@ public class Wallet implements Serializable, BlockChainListener {
     }
 
     /**
+     * Deletes transactions which appeared after a certain date
+     */
+    public synchronized void clearTransactions(Date fromDate) {
+        lock.lock();
+        try {
+            if (fromDate == null) {
+                unspent.clear();
+                spent.clear();
+                pending.clear();
+                inactive.clear();
+                dead.clear();
+            } else {
+                removeEntriesAfterDate(unspent, fromDate);
+                removeEntriesAfterDate(spent, fromDate);
+                removeEntriesAfterDate(pending, fromDate);
+                removeEntriesAfterDate(inactive, fromDate);
+                removeEntriesAfterDate(dead, fromDate);
+            }
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    private void removeEntriesAfterDate(Map<Sha256Hash, Transaction> pool, Date fromDate) {
+        checkState(lock.isLocked());
+        log.debug("Wallet#removeEntriesAfterDate - Removing transactions later than " + fromDate.toString());
+        Set<Entry<Sha256Hash, Transaction>> loopEntries = pool.entrySet();
+        Iterator<Entry<Sha256Hash, Transaction>> iterator = loopEntries.iterator();
+        while(iterator.hasNext()) {
+            Entry<Sha256Hash, Transaction> member = iterator.next();
+            if (member.getValue() != null) {
+                Date updateTime = member.getValue().getUpdateTime();
+                if (updateTime != null && updateTime.after(fromDate)) {
+                    iterator.remove();
+                    //log.debug("Wallet#removeEntriesAfterDate - Removed tx.1 " + member.getValue());
+                    continue;
+                }
+                
+                // if no updateTime remove them
+                if (updateTime == null || updateTime.getTime() == 0) {
+                    iterator.remove();
+                    //log.debug("Removed tx.2 " + member.getValue());
+                    continue;                    
+                }
+            }
+        }
+    }
+
+    /**
      * Convenience wrapper around {@link Wallet#encrypt(com.google.bitcoin.crypto.KeyCrypter,
      * org.spongycastle.crypto.params.KeyParameter)} which uses the default Scrypt key derivation algorithm and
      * parameters, derives a key from the given password and returns the created key.
@@ -2749,10 +2582,6 @@ public class Wallet implements Serializable, BlockChainListener {
 
             // The wallet is now encrypted.
             this.keyCrypter = keyCrypter;
-
-            if (autosaveToFile != null) {
-                autoSave();
-            }
         } finally {
             lock.unlock();
         }
@@ -2792,10 +2621,6 @@ public class Wallet implements Serializable, BlockChainListener {
 
             // The wallet is now unencrypted.
             keyCrypter = null;
-
-            if (autosaveToFile != null) {
-                autoSave();
-            }
         } finally {
             lock.unlock();
         }
@@ -2930,19 +2755,11 @@ public class Wallet implements Serializable, BlockChainListener {
         return getEncryptionType() != EncryptionType.UNENCRYPTED;
     }
 
-    /**
-     * Get the version of the Wallet.
-     * This is an int you can use to indicate which versions of wallets your code understands,
-     * and which come from the future (and hence cannot be safely loaded).
-     */
-    public int getVersion() {
+    public MultiBitWalletVersion getVersion() {
         return version;
     }
 
-    /**
-     * Set the version number of the wallet. See {@link Wallet#getVersion()}.
-     */
-    public void setVersion(int version) {
+    public void setVersion(MultiBitWalletVersion version) {
         this.version = version;
     }
 

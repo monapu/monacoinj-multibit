@@ -32,6 +32,9 @@ import com.google.bitcoin.crypto.EncryptedPrivateKey;
 import com.google.bitcoin.crypto.KeyCrypter;
 import com.google.bitcoin.crypto.KeyCrypterException;
 import com.google.bitcoin.crypto.KeyCrypterScrypt;
+
+import org.multibit.store.MultiBitWalletVersion;
+import org.multibit.store.WalletVersionException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -190,8 +193,10 @@ public class WalletProtobufSerializer {
         }
 
         // Populate the wallet version.
-        walletBuilder.setVersion(wallet.getVersion());
-
+        if (wallet.getVersion() != null) {
+            walletBuilder.setVersion(wallet.getVersion().getWalletVersionAsInt());
+        }
+            
         Collection<Protos.Extension> extensions = helper.getExtensionsToWrite(wallet);
         for(Protos.Extension ext : extensions) {
             walletBuilder.addExtension(ext);
@@ -393,7 +398,20 @@ public class WalletProtobufSerializer {
         }
 
         if (walletProto.hasVersion()) {
-            wallet.setVersion(walletProto.getVersion());
+            int version = walletProto.getVersion();
+            if (version == MultiBitWalletVersion.PROTOBUF.getWalletVersionAsInt()) {
+                wallet.setVersion(MultiBitWalletVersion.PROTOBUF);
+            } else {
+                if (version == MultiBitWalletVersion.PROTOBUF_ENCRYPTED.getWalletVersionAsInt()) {
+                    wallet.setVersion(MultiBitWalletVersion.PROTOBUF_ENCRYPTED);  
+                } else {
+                    // Something from the future.
+                    throw new WalletVersionException("Did not understand wallet version of '" + version + "'");
+                }
+            }
+        } else {
+            // Grandfather in as protobuf.2
+            wallet.setVersion(MultiBitWalletVersion.PROTOBUF);
         }
 
         // Make sure the object can be re-used to read another wallet without corruption.

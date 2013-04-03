@@ -23,6 +23,8 @@ import java.math.BigInteger;
 import java.util.ListIterator;
 import java.util.concurrent.CopyOnWriteArrayList;
 
+import com.google.bitcoin.IsMultiBitClass;
+
 /**
  * <p>A TransactionConfidence object tracks data you can use to make a confidence decision about a transaction.
  * It also contains some pre-canned rules for common scenarios: if you aren't really sure what level of confidence
@@ -51,7 +53,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * method to ensure the block depth and work done are up to date.</p>
  * To make a copy that won't be changed, use {@link com.google.bitcoin.core.TransactionConfidence#duplicate()}.
  */
-public class TransactionConfidence implements Serializable {
+public class TransactionConfidence implements Serializable, IsMultiBitClass {
     private static final long serialVersionUID = 4577920141400556444L;
 
     /**
@@ -60,6 +62,9 @@ public class TransactionConfidence implements Serializable {
      * to us, so only peers we explicitly connected to should go here.
      */
     private CopyOnWriteArrayList<PeerAddress> broadcastBy;
+    
+    private int broadcastByCount;
+
     /** The Transaction that this confidence object is associated with. */
     private Transaction transaction;
     // Lazily created listeners array.
@@ -151,6 +156,7 @@ public class TransactionConfidence implements Serializable {
         // Assume a default number of peers for our set.
         broadcastBy = new CopyOnWriteArrayList<PeerAddress>();
         listeners = new CopyOnWriteArrayList<Listener>();
+        broadcastByCount = 0;
         transaction = tx;
     }
 
@@ -241,6 +247,7 @@ public class TransactionConfidence implements Serializable {
     public void markBroadcastBy(PeerAddress address) {
         if (!broadcastBy.addIfAbsent(address))
             return;  // Duplicate.
+        broadcastByCount++;
         synchronized (this) {
             if (getConfidenceType() == ConfidenceType.UNKNOWN) {
                 this.confidenceType = ConfidenceType.NOT_SEEN_IN_CHAIN;
@@ -398,6 +405,7 @@ public class TransactionConfidence implements Serializable {
         // There is no point in this sync block, it's just to help FindBugs.
         synchronized (c) {
             c.broadcastBy.addAll(broadcastBy);
+            c.broadcastByCount = broadcastByCount;
             c.confidenceType = confidenceType;
             c.overridingTransaction = overridingTransaction;
             c.appearedAtChainHeight = appearedAtChainHeight;
@@ -428,5 +436,9 @@ public class TransactionConfidence implements Serializable {
      */
     public synchronized void setSource(Source source) {
         this.source = source;
+    }
+
+    public int getBroadcastByCount() {
+        return broadcastByCount;
     }
 }
