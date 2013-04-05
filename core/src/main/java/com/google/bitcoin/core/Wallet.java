@@ -779,15 +779,12 @@ public class Wallet implements Serializable, BlockChainListener, IsMultiBitClass
         
         // If the transaction is already in our spent or unspent or there is no money in it it is probably
         // due to a block replay so we do not want to do anything with it.
-        // If it is on a sidechain then let the ELSE below deal with it
-        // If it is a double spend it gets processed later.
-//        Transaction doubleSpend = findDoubleSpendAgainstPending(tx);
-//        boolean alreadyHaveIt = spent.containsKey(tx.getHash()) || unspent.containsKey(tx.getHash());
-//        boolean noMoneyInItAndNotMine = BigInteger.ZERO.equals(valueSentFromMe) && BigInteger.ZERO.equals(valueSentToMe) && !tx.isMine(this);
-//        if (bestChain && (doubleSpend == null) && (alreadyHaveIt || noMoneyInItAndNotMine)) {
-//            log.info("Already have tx " + tx.getHash() + " in spent/ unspent or there is no money in it and it is not mine so ignoring");
-//            return;
-//        }
+        boolean alreadyHaveIt = spent.containsKey(tx.getHash()) || unspent.containsKey(tx.getHash());
+        boolean noMoneyInItAndNotMine = BigInteger.ZERO.equals(valueSentFromMe) && BigInteger.ZERO.equals(valueSentToMe) && !tx.isMine(this);
+        if (bestChain && (alreadyHaveIt || noMoneyInItAndNotMine)) {
+            log.info("Already have tx " + tx.getHash() + " in spent/ unspent or there is no money in it and it is not mine so ignoring");
+            return;
+        }
 
         onWalletChangedSuppressions++;
 

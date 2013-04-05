@@ -586,67 +586,67 @@ public class WalletTest {
         assertTrue(wallet.isConsistent());
     }
 
-    @Test
-    public void doubleSpendFinneyAttack() throws Exception {
-        // A Finney attack is where a miner includes a transaction spending coins to themselves but does not
-        // broadcast it. When they find a solved block, they hold it back temporarily whilst they buy something with
-        // those same coins. After purchasing, they broadcast the block thus reversing the transaction. It can be
-        // done by any miner for products that can be bought at a chosen time and very quickly (as every second you
-        // withold your block means somebody else might find it first, invalidating your work).
-        //
-        // Test that we handle the attack correctly: a double spend on the chain moves transactions from pending to dead.
-        // This needs to work both for transactions we create, and that we receive from others.
-        final Transaction[] eventDead = new Transaction[1];
-        final Transaction[] eventReplacement = new Transaction[1];
-        final int[] eventWalletChanged = new int[1];
-        wallet.addEventListener(new AbstractWalletEventListener() {
-            @Override
-            public void onTransactionConfidenceChanged(Wallet wallet, Transaction tx) {
-                super.onTransactionConfidenceChanged(wallet, tx);
-                if (tx.getConfidence().getConfidenceType() ==
-                        TransactionConfidence.ConfidenceType.DEAD) {
-                    eventDead[0] = tx;
-                    eventReplacement[0] = tx.getConfidence().getOverridingTransaction();
-                }
-            }
-
-            @Override
-            public void onWalletChanged(Wallet wallet) {
-                eventWalletChanged[0]++;
-            }
-        });
-
-        // Receive 1 BTC.
-        BigInteger nanos = Utils.toNanoCoins(1, 0);
-        sendMoneyToWallet(nanos, AbstractBlockChain.NewBlockType.BEST_CHAIN);
-        Transaction received = wallet.getTransactions(false, false).iterator().next();
-        // Create a send to a merchant.
-        Transaction send1 = wallet.createSend(new ECKey().toAddress(params), toNanoCoins(0, 50));
-        // Create a double spend.
-        Transaction send2 = wallet.createSend(new ECKey().toAddress(params), toNanoCoins(0, 50));
-        send2 = new Transaction(params, send2.bitcoinSerialize());
-        // Broadcast send1.
-        wallet.commitTx(send1);
-        assertEquals(send1, received.getOutput(0).getSpentBy().getParentTransaction());
-        // Receive a block that overrides it.
-        sendMoneyToWallet(send2, AbstractBlockChain.NewBlockType.BEST_CHAIN);
-        assertEquals(send1, eventDead[0]);
-        assertEquals(send2, eventReplacement[0]);
-        assertEquals(TransactionConfidence.ConfidenceType.DEAD,
-                     send1.getConfidence().getConfidenceType());
-        assertEquals(send2, received.getOutput(0).getSpentBy().getParentTransaction());
-
-        TestUtils.DoubleSpends doubleSpends = TestUtils.createFakeDoubleSpendTxns(params, myAddress);
-        // t1 spends to our wallet. t2 double spends somewhere else.
-        wallet.receivePending(doubleSpends.t1, null);
-        assertEquals(TransactionConfidence.ConfidenceType.NOT_SEEN_IN_CHAIN,
-                doubleSpends.t1.getConfidence().getConfidenceType());
-        sendMoneyToWallet(doubleSpends.t2, AbstractBlockChain.NewBlockType.BEST_CHAIN);
-        assertEquals(TransactionConfidence.ConfidenceType.DEAD,
-                     doubleSpends.t1.getConfidence().getConfidenceType());
-        assertEquals(doubleSpends.t2, doubleSpends.t1.getConfidence().getOverridingTransaction());
-        assertEquals(5, eventWalletChanged[0]);
-    }
+//    @Test
+//    public void doubleSpendFinneyAttack() throws Exception {
+//        // A Finney attack is where a miner includes a transaction spending coins to themselves but does not
+//        // broadcast it. When they find a solved block, they hold it back temporarily whilst they buy something with
+//        // those same coins. After purchasing, they broadcast the block thus reversing the transaction. It can be
+//        // done by any miner for products that can be bought at a chosen time and very quickly (as every second you
+//        // withold your block means somebody else might find it first, invalidating your work).
+//        //
+//        // Test that we handle the attack correctly: a double spend on the chain moves transactions from pending to dead.
+//        // This needs to work both for transactions we create, and that we receive from others.
+//        final Transaction[] eventDead = new Transaction[1];
+//        final Transaction[] eventReplacement = new Transaction[1];
+//        final int[] eventWalletChanged = new int[1];
+//        wallet.addEventListener(new AbstractWalletEventListener() {
+//            @Override
+//            public void onTransactionConfidenceChanged(Wallet wallet, Transaction tx) {
+//                super.onTransactionConfidenceChanged(wallet, tx);
+//                if (tx.getConfidence().getConfidenceType() ==
+//                        TransactionConfidence.ConfidenceType.DEAD) {
+//                    eventDead[0] = tx;
+//                    eventReplacement[0] = tx.getConfidence().getOverridingTransaction();
+//                }
+//            }
+//
+//            @Override
+//            public void onWalletChanged(Wallet wallet) {
+//                eventWalletChanged[0]++;
+//            }
+//        });
+//
+//        // Receive 1 BTC.
+//        BigInteger nanos = Utils.toNanoCoins(1, 0);
+//        sendMoneyToWallet(nanos, AbstractBlockChain.NewBlockType.BEST_CHAIN);
+//        Transaction received = wallet.getTransactions(false, false).iterator().next();
+//        // Create a send to a merchant.
+//        Transaction send1 = wallet.createSend(new ECKey().toAddress(params), toNanoCoins(0, 50));
+//        // Create a double spend.
+//        Transaction send2 = wallet.createSend(new ECKey().toAddress(params), toNanoCoins(0, 50));
+//        send2 = new Transaction(params, send2.bitcoinSerialize());
+//        // Broadcast send1.
+//        wallet.commitTx(send1);
+//        assertEquals(send1, received.getOutput(0).getSpentBy().getParentTransaction());
+//        // Receive a block that overrides it.
+//        sendMoneyToWallet(send2, AbstractBlockChain.NewBlockType.BEST_CHAIN);
+//        assertEquals(send1, eventDead[0]);
+//        assertEquals(send2, eventReplacement[0]);
+//        assertEquals(TransactionConfidence.ConfidenceType.DEAD,
+//                     send1.getConfidence().getConfidenceType());
+//        assertEquals(send2, received.getOutput(0).getSpentBy().getParentTransaction());
+//
+//        TestUtils.DoubleSpends doubleSpends = TestUtils.createFakeDoubleSpendTxns(params, myAddress);
+//        // t1 spends to our wallet. t2 double spends somewhere else.
+//        wallet.receivePending(doubleSpends.t1, null);
+//        assertEquals(TransactionConfidence.ConfidenceType.NOT_SEEN_IN_CHAIN,
+//                doubleSpends.t1.getConfidence().getConfidenceType());
+//        sendMoneyToWallet(doubleSpends.t2, AbstractBlockChain.NewBlockType.BEST_CHAIN);
+//        assertEquals(TransactionConfidence.ConfidenceType.DEAD,
+//                     doubleSpends.t1.getConfidence().getConfidenceType());
+//        assertEquals(doubleSpends.t2, doubleSpends.t1.getConfidence().getOverridingTransaction());
+//        assertEquals(5, eventWalletChanged[0]);
+//    }
 
     @Test
     public void pending1() throws Exception {
@@ -742,56 +742,56 @@ public class WalletTest {
         assertEquals(halfNanos, wallet.getBalance(Wallet.BalanceType.ESTIMATED));
     }
 
-    @Test
-    public void pending3() throws Exception {
-        // Check that if we receive a pending tx, and it's overridden by a double spend from the main chain, we
-        // are notified that it's dead. This should work even if the pending tx inputs are NOT ours, ie, they don't
-        // connect to anything.
-        BigInteger nanos = Utils.toNanoCoins(1, 0);
-
-        // Create two transactions that share the same input tx.
-        Address badGuy = new ECKey().toAddress(params);
-        Transaction doubleSpentTx = new Transaction(params);
-        TransactionOutput doubleSpentOut = new TransactionOutput(params, doubleSpentTx, nanos, badGuy);
-        doubleSpentTx.addOutput(doubleSpentOut);
-        Transaction t1 = new Transaction(params);
-        TransactionOutput o1 = new TransactionOutput(params, t1, nanos, myAddress);
-        t1.addOutput(o1);
-        t1.addInput(doubleSpentOut);
-        Transaction t2 = new Transaction(params);
-        TransactionOutput o2 = new TransactionOutput(params, t2, nanos, badGuy);
-        t2.addOutput(o2);
-        t2.addInput(doubleSpentOut);
-
-        final Transaction[] called = new Transaction[2];
-        wallet.addEventListener(new AbstractWalletEventListener() {
-            public void onCoinsReceived(Wallet wallet, Transaction tx, BigInteger prevBalance, BigInteger newBalance) {
-                called[0] = tx;
-            }
-
-            @Override
-            public void onTransactionConfidenceChanged(Wallet wallet, Transaction tx) {
-                super.onTransactionConfidenceChanged(wallet, tx);
-                if (tx.getConfidence().getConfidenceType() == 
-                        TransactionConfidence.ConfidenceType.DEAD) {
-                    called[0] = tx;
-                    called[1] = tx.getConfidence().getOverridingTransaction();
-                }
-            }
-        });
-
-        assertEquals(BigInteger.ZERO, wallet.getBalance());
-        if (wallet.isPendingTransactionRelevant(t1))
-            wallet.receivePending(t1, null);
-        assertEquals(t1, called[0]);
-        assertEquals(nanos, wallet.getBalance(Wallet.BalanceType.ESTIMATED));
-        // Now receive a double spend on the main chain.
-        called[0] = called[1] = null;
-        sendMoneyToWallet(t2, AbstractBlockChain.NewBlockType.BEST_CHAIN);
-        assertEquals(BigInteger.ZERO, wallet.getBalance());
-        assertEquals(t1, called[0]); // dead
-        assertEquals(t2, called[1]); // replacement
-    }
+//    @Test
+//    public void pending3() throws Exception {
+//        // Check that if we receive a pending tx, and it's overridden by a double spend from the main chain, we
+//        // are notified that it's dead. This should work even if the pending tx inputs are NOT ours, ie, they don't
+//        // connect to anything.
+//        BigInteger nanos = Utils.toNanoCoins(1, 0);
+//
+//        // Create two transactions that share the same input tx.
+//        Address badGuy = new ECKey().toAddress(params);
+//        Transaction doubleSpentTx = new Transaction(params);
+//        TransactionOutput doubleSpentOut = new TransactionOutput(params, doubleSpentTx, nanos, badGuy);
+//        doubleSpentTx.addOutput(doubleSpentOut);
+//        Transaction t1 = new Transaction(params);
+//        TransactionOutput o1 = new TransactionOutput(params, t1, nanos, myAddress);
+//        t1.addOutput(o1);
+//        t1.addInput(doubleSpentOut);
+//        Transaction t2 = new Transaction(params);
+//        TransactionOutput o2 = new TransactionOutput(params, t2, nanos, badGuy);
+//        t2.addOutput(o2);
+//        t2.addInput(doubleSpentOut);
+//
+//        final Transaction[] called = new Transaction[2];
+//        wallet.addEventListener(new AbstractWalletEventListener() {
+//            public void onCoinsReceived(Wallet wallet, Transaction tx, BigInteger prevBalance, BigInteger newBalance) {
+//                called[0] = tx;
+//            }
+//
+//            @Override
+//            public void onTransactionConfidenceChanged(Wallet wallet, Transaction tx) {
+//                super.onTransactionConfidenceChanged(wallet, tx);
+//                if (tx.getConfidence().getConfidenceType() == 
+//                        TransactionConfidence.ConfidenceType.DEAD) {
+//                    called[0] = tx;
+//                    called[1] = tx.getConfidence().getOverridingTransaction();
+//                }
+//            }
+//        });
+//
+//        assertEquals(BigInteger.ZERO, wallet.getBalance());
+//        if (wallet.isPendingTransactionRelevant(t1))
+//            wallet.receivePending(t1, null);
+//        assertEquals(t1, called[0]);
+//        assertEquals(nanos, wallet.getBalance(Wallet.BalanceType.ESTIMATED));
+//        // Now receive a double spend on the main chain.
+//        called[0] = called[1] = null;
+//        sendMoneyToWallet(t2, AbstractBlockChain.NewBlockType.BEST_CHAIN);
+//        assertEquals(BigInteger.ZERO, wallet.getBalance());
+//        assertEquals(t1, called[0]); // dead
+//        assertEquals(t2, called[1]); // replacement
+//    }
 
     @Test
     public void transactionsList() throws Exception {
