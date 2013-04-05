@@ -328,7 +328,6 @@ public class MultiBitWalletProtobufSerializer extends WalletProtobufSerializer {
      * @throws IllegalArgumentException if the wallet is corrupt.
      */
     public Wallet readWallet(InputStream input) throws IOException {
-        // TODO: This method should throw more specific exception types than IllegalArgumentException.
         Protos.Wallet walletProto = parseToProto(input);
 
         // System.out.println(TextFormat.printToString(walletProto));
@@ -425,7 +424,7 @@ public class MultiBitWalletProtobufSerializer extends WalletProtobufSerializer {
 
         if (walletProto.hasVersion()) {
             int version = walletProto.getVersion();
-            if (version == MultiBitWalletVersion.PROTOBUF.getWalletVersionAsInt()) {
+            if (version == 0 || version == MultiBitWalletVersion.PROTOBUF.getWalletVersionAsInt()) {
                 wallet.setVersion(MultiBitWalletVersion.PROTOBUF);
             } else {
                 if (version == MultiBitWalletVersion.PROTOBUF_ENCRYPTED.getWalletVersionAsInt()) {
