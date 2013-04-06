@@ -424,7 +424,15 @@ public class MultiBitWalletProtobufSerializer extends WalletProtobufSerializer {
 
         if (walletProto.hasVersion()) {
             int version = walletProto.getVersion();
-            if (version == 0 || version == MultiBitWalletVersion.PROTOBUF.getWalletVersionAsInt()) {
+            if (version == 0) {
+                if (walletEncryptionType == EncryptionType.ENCRYPTED_SCRYPT_AES) {
+                    // If it is encrypted it is protobuf.3
+                    wallet.setVersion(MultiBitWalletVersion.PROTOBUF_ENCRYPTED); 
+                } else if (walletEncryptionType == EncryptionType.UNENCRYPTED) {
+                    // If it is unencrypted it is protobuf.2
+                    wallet.setVersion(MultiBitWalletVersion.PROTOBUF); 
+                }
+            } else if (version == MultiBitWalletVersion.PROTOBUF.getWalletVersionAsInt()) {
                 wallet.setVersion(MultiBitWalletVersion.PROTOBUF);
             } else {
                 if (version == MultiBitWalletVersion.PROTOBUF_ENCRYPTED.getWalletVersionAsInt()) {
