@@ -431,6 +431,9 @@ public class MultiBitWalletProtobufSerializer extends WalletProtobufSerializer {
                 } else if (walletEncryptionType == EncryptionType.UNENCRYPTED) {
                     // If it is unencrypted it is protobuf.2
                     wallet.setVersion(MultiBitWalletVersion.PROTOBUF); 
+                } else {
+                    // Something we don't know about.
+                    throw new WalletVersionException("Did not understand a wallet with a version of 0 and a walletEncryptionType of '" + walletEncryptionType + "'");
                 }
             } else if (version == MultiBitWalletVersion.PROTOBUF.getWalletVersionAsInt()) {
                 wallet.setVersion(MultiBitWalletVersion.PROTOBUF);
