@@ -883,16 +883,16 @@ public class WalletTest {
 
         // Receive a block on the best chain - this should set the last block seen hash.
         chain.add(b10);
-        assertEquals(b10.getHash(), wallet.getLastBlockSeenHash());
+        assertEquals("Wrong b10 hash.1", b10.getHash(), wallet.getLastBlockSeenHash());
         // Receive a block on the side chain - this should not change the last block seen hash.
         chain.add(b11);
-        assertEquals(b10.getHash(), wallet.getLastBlockSeenHash());
+        assertEquals("Wrong b10 hash.2", b10.getHash(), wallet.getLastBlockSeenHash());
         // Receive block 2 on the best chain - this should change the last block seen hash.
         chain.add(b2);
-        assertEquals(b2.getHash(), wallet.getLastBlockSeenHash());
+        assertEquals("Wrong b2 hash", b2.getHash(), wallet.getLastBlockSeenHash());
         // Receive block 3 on the best chain - this should change the last block seen hash despite having no txns.
         chain.add(b3);
-        assertEquals(b3.getHash(), wallet.getLastBlockSeenHash());
+        assertEquals("Wrong b3 hash", b3.getHash(), wallet.getLastBlockSeenHash());
     }
 
     @Test

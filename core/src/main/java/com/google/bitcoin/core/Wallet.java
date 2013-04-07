@@ -911,9 +911,16 @@ public class Wallet implements Serializable, BlockChainListener, IsMultiBitClass
             return;
         lock.lock();
         try {
-            // Store the new block hash.
-            setLastBlockSeenHash(newBlockHash);
-            setLastBlockSeenHeight(block.getHeight());
+            // Store the new block hash if it is the successor of the current lastSeenBlock.
+            // Otherwise keep the previous.
+            // This is to avoid a gap in the blocks in the blockchain that the wallet has seen.
+            // You can set it to backwards in time (e.g. at the start a replay) as this is safe.
+            int lastBlockSeenHeight = getLastBlockSeenHeight(); 
+            System.out.println("Previous lastBlockSeenHeight = " + lastBlockSeenHeight + ", new = " + block.getHeight());
+            if (lastBlockSeenHeight == -1 || (lastBlockSeenHeight >= 0 && (block.getHeight() <= lastBlockSeenHeight + 1))) {
+                setLastBlockSeenHash(newBlockHash);
+                setLastBlockSeenHeight(block.getHeight());                    
+            }
             // TODO: Clarify the code below.
             // Notify all the BUILDING transactions of the new block.
             // This is so that they can update their work done and depth.
