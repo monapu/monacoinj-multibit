@@ -916,7 +916,6 @@ public class Wallet implements Serializable, BlockChainListener, IsMultiBitClass
             // This is to avoid a gap in the blocks in the blockchain that the wallet has seen.
             // You can set it to backwards in time (e.g. at the start a replay) as this is safe.
             int lastBlockSeenHeight = getLastBlockSeenHeight(); 
-            System.out.println("Previous lastBlockSeenHeight = " + lastBlockSeenHeight + ", new = " + block.getHeight());
             if (lastBlockSeenHeight == -1 || (lastBlockSeenHeight >= 0 && (block.getHeight() <= lastBlockSeenHeight + 1))) {
                 setLastBlockSeenHash(newBlockHash);
                 setLastBlockSeenHeight(block.getHeight());                    
