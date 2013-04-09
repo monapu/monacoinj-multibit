@@ -5,6 +5,7 @@
   <groupId>com.google</groupId>
   <artifactId>bitcoinj-parent</artifactId>
   <version>0.9-SNAPSHOT</version>
+
   <packaging>pom</packaging>
 
   <modules>
