@@ -181,7 +181,6 @@ public class MultiBitWalletProtobufSerializer extends WalletProtobufSerializer {
             // The wallet is encrypted.
             walletBuilder.setEncryptionType(keyCrypter.getUnderstoodEncryptionType());
             if (keyCrypter instanceof KeyCrypterScrypt) {
-                walletBuilder.setEncryptionType(EncryptionType.ENCRYPTED_SCRYPT_AES);
                 KeyCrypterScrypt keyCrypterScrypt = (KeyCrypterScrypt) keyCrypter;
                 walletBuilder.setEncryptionParameters(keyCrypterScrypt.getScryptParameters());
             } else {
@@ -330,7 +329,7 @@ public class MultiBitWalletProtobufSerializer extends WalletProtobufSerializer {
     public Wallet readWallet(InputStream input) throws IOException {
         Protos.Wallet walletProto = parseToProto(input);
 
-        // System.out.println(TextFormat.printToString(walletProto));
+        System.out.println(TextFormat.printToString(walletProto));
 
         // Read the scrypt parameters that specify how encryption and decryption is performed.
         EncryptionType walletEncryptionType = EncryptionType.UNENCRYPTED;
