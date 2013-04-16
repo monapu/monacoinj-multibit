@@ -411,22 +411,24 @@ public abstract class AbstractBlockChain {
             // coinbases aren't used before maturity.
             boolean first = true;
             for (BlockChainListener listener : listeners) {
-                if (block.transactions != null || filteredTxn != null) {
-                    // If this is not the first wallet, ask for the transactions to be duplicated before being given
-                    // to the wallet when relevant. This ensures that if we have two connected wallets and a tx that
-                    // is relevant to both of them, they don't end up accidentally sharing the same object (which can
-                    // result in temporary in-memory corruption during re-orgs). See bug 257. We only duplicate in
-                    // the case of multiple wallets to avoid an unnecessary efficiency hit in the common case.
-                    sendTransactionsToListener(newStoredBlock, NewBlockType.BEST_CHAIN, listener,
-                            block.transactions != null ? block.transactions : filteredTxn, !first);
-                }
-                if (filteredTxHashList != null) {
-                    for (Sha256Hash hash : filteredTxHashList) {
-                        listener.notifyTransactionIsInBlock(hash, newStoredBlock, NewBlockType.BEST_CHAIN);
+                if (listener != null) {
+                    if (block.transactions != null || filteredTxn != null) {
+                        // If this is not the first wallet, ask for the transactions to be duplicated before being given
+                        // to the wallet when relevant. This ensures that if we have two connected wallets and a tx that
+                        // is relevant to both of them, they don't end up accidentally sharing the same object (which can
+                        // result in temporary in-memory corruption during re-orgs). See bug 257. We only duplicate in
+                        // the case of multiple wallets to avoid an unnecessary efficiency hit in the common case.
+                        sendTransactionsToListener(newStoredBlock, NewBlockType.BEST_CHAIN, listener,
+                                block.transactions != null ? block.transactions : filteredTxn, !first);
                     }
+                    if (filteredTxHashList != null) {
+                        for (Sha256Hash hash : filteredTxHashList) {
+                            listener.notifyTransactionIsInBlock(hash, newStoredBlock, NewBlockType.BEST_CHAIN);
+                        }
+                    }
+                    listener.notifyNewBestBlock(newStoredBlock);
+                    first = false;
                 }
-                listener.notifyNewBestBlock(newStoredBlock);
-                first = false;
             }
         } else {
             // This block connects to somewhere other than the top of the best known chain. We treat these differently.
@@ -468,23 +470,25 @@ public abstract class AbstractBlockChain {
             if (block.transactions != null || filteredTxn != null) {
                 boolean first = true;
                 for (BlockChainListener listener : listeners) {
-                    List<Transaction> txnToNotify;
-                    if (block.transactions != null)
-                        txnToNotify = block.transactions;
-                    else
-                        txnToNotify = filteredTxn;
-                    // If this is not the first wallet, ask for the transactions to be duplicated before being given
-                    // to the wallet when relevant. This ensures that if we have two connected wallets and a tx that
-                    // is relevant to both of them, they don't end up accidentally sharing the same object (which can
-                    // result in temporary in-memory corruption during re-orgs). See bug 257. We only duplicate in
-                    // the case of multiple wallets to avoid an unnecessary efficiency hit in the common case.
-                    sendTransactionsToListener(newBlock, NewBlockType.SIDE_CHAIN, listener, txnToNotify, first);
-                    if (filteredTxHashList != null) {
-                        for (Sha256Hash hash : filteredTxHashList) {
-                            listener.notifyTransactionIsInBlock(hash, newBlock, NewBlockType.SIDE_CHAIN);
+                    if (listener != null) {
+                        List<Transaction> txnToNotify;
+                        if (block.transactions != null)
+                            txnToNotify = block.transactions;
+                        else
+                            txnToNotify = filteredTxn;
+                        // If this is not the first wallet, ask for the transactions to be duplicated before being given
+                        // to the wallet when relevant. This ensures that if we have two connected wallets and a tx that
+                        // is relevant to both of them, they don't end up accidentally sharing the same object (which can
+                        // result in temporary in-memory corruption during re-orgs). See bug 257. We only duplicate in
+                        // the case of multiple wallets to avoid an unnecessary efficiency hit in the common case.
+                        sendTransactionsToListener(newBlock, NewBlockType.SIDE_CHAIN, listener, txnToNotify, first);
+                        if (filteredTxHashList != null) {
+                            for (Sha256Hash hash : filteredTxHashList) {
+                                listener.notifyTransactionIsInBlock(hash, newBlock, NewBlockType.SIDE_CHAIN);
+                            }
                         }
+                        first = false;
                     }
-                    first = false;
                 }
             }
             
@@ -574,11 +578,13 @@ public abstract class AbstractBlockChain {
         // before and our previous spends might have been undone.
         for (int i = 0; i < listeners.size(); i++) {
             BlockChainListener listener = listeners.get(i);
-            listener.reorganize(splitPoint, oldBlocks, newBlocks);
-            if (i == listeners.size()) {
-                break;  // Listener removed itself and it was the last one.
-            } else if (listeners.get(i) != listener) {
-                i--;  // Listener removed itself and it was not the last one.
+            if (listener != null) {
+                listener.reorganize(splitPoint, oldBlocks, newBlocks);
+                if (i == listeners.size()) {
+                    break;  // Listener removed itself and it was the last one.
+                } else if (listeners.get(i) != listener) {
+                    i--;  // Listener removed itself and it was not the last one.
+                }
             }
         }
         // Update the pointer to the best known block.
@@ -645,7 +651,7 @@ public abstract class AbstractBlockChain {
                                                    boolean clone) throws VerificationException {
         for (Transaction tx : transactions) {
             try {
-                if (listener.isTransactionRelevant(tx)) {
+                if (listener != null && listener.isTransactionRelevant(tx)) {
                     if (clone)
                         tx = new Transaction(tx.params, tx.bitcoinSerialize());
                     listener.receiveFromBlock(tx, block, blockType);
@@ -813,7 +819,7 @@ public abstract class AbstractBlockChain {
         for (Transaction tx : block.transactions) {
             try {
                 for (BlockChainListener listener : listeners) {
-                    if (listener.isTransactionRelevant(tx)) return true;
+                    if (listener != null && listener.isTransactionRelevant(tx)) return true;
                 }
             } catch (ScriptException e) {
                 // We don't want scripts we don't understand to break the block chain so just note that this tx was
