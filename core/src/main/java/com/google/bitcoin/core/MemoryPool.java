@@ -274,6 +274,7 @@ public class MemoryPool {
     private void markBroadcast(PeerAddress byPeer, Transaction tx) {
         // Marking a TX as broadcast by a peer can run event listeners that might call back into Peer or PeerGroup.
         // Thus we unlock ourselves here to avoid potential inversions.
+        System.out.println("MemoryPool#markBroadcastBy peer " + byPeer.toString() + ", tx = " + tx.getHashAsString());
         checkState(lock.isLocked());
         lock.unlock();
         try {

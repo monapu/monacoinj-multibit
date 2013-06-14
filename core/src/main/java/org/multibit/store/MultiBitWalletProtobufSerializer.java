@@ -367,6 +367,13 @@ public class MultiBitWalletProtobufSerializer extends WalletProtobufSerializer {
             wallet.setDescription(walletProto.getDescription());
         }
 
+        // Read the scrypt parameters that specify how encryption and decryption is performed.
+        EncryptionType walletEncryptionType = EncryptionType.UNENCRYPTED;
+        
+        if (walletProto.hasEncryptionType()) {
+            walletEncryptionType = walletProto.getEncryptionType();
+        }
+        
         // Read all keys
         for (Protos.Key keyProto : walletProto.getKeyList()) {
             if (!(keyProto.getType() == Protos.Key.Type.ORIGINAL || keyProto.getType() == Protos.Key.Type.ENCRYPTED_SCRYPT_AES)) {

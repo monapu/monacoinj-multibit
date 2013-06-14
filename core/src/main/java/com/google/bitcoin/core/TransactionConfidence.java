@@ -25,6 +25,9 @@ import java.math.BigInteger;
 import java.util.ListIterator;
 import java.util.concurrent.CopyOnWriteArrayList;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.google.bitcoin.IsMultiBitClass;
 
 /**
@@ -57,6 +60,8 @@ import com.google.bitcoin.IsMultiBitClass;
  */
 public class TransactionConfidence implements Serializable, IsMultiBitClass {
     private static final long serialVersionUID = 4577920141400556444L;
+
+    private static final Logger log = LoggerFactory.getLogger(TransactionConfidence.class);
 
     /**
      * The peers that have announced the transaction to us. Network nodes don't have stable identities, so we use
@@ -245,6 +250,8 @@ public class TransactionConfidence implements Serializable, IsMultiBitClass {
      * @param address IP address of the peer, used as a proxy for identity.
      */
     public void markBroadcastBy(PeerAddress address) {
+        System.out.println("TransactionConfidence#markBroadcastBy peer " + address.toString());
+
         if (!broadcastBy.addIfAbsent(address))
             return;  // Duplicate.
         broadcastByCount++;
@@ -399,8 +406,11 @@ public class TransactionConfidence implements Serializable, IsMultiBitClass {
     }
 
     private void runListeners() {
-        for (Listener listener : listeners)
+        log.debug("Run listeners called for tx " + transaction.getHashAsString());
+        for (Listener listener : listeners) {
+            log.debug("Listeners called for listener " + listener);
             listener.onConfidenceChanged(transaction);
+        }
     }
 
     /**

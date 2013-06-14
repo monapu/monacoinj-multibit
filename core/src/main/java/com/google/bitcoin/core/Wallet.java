@@ -592,8 +592,16 @@ public class Wallet implements Serializable, BlockChainListener, IsMultiBitClass
             tx.verify();
             // Repeat the check of relevancy here, even though the caller may have already done so - this is to avoid
             // race conditions where receivePending may be being called in parallel.
-            if (!isPendingTransactionRelevant(tx))
+            if (!isPendingTransactionRelevant(tx)) {
+                // If the transaction is pending we know about it already but its transaction confidence may
+                // be different (ie seen by more peers).
+                log.debug("Transaction " + tx.getHashAsString() + " has confidence " + tx.getConfidence().getConfidenceType());
+                //if (tx.getConfidence().getConfidenceType() == ConfidenceType.PENDING ||
+                //        tx.getConfidence().getConfidenceType() == ConfidenceType.UNKNOWN) {
+                    invokeOnTransactionConfidenceChanged(tx);
+                //}
                 return;
+            }
             AnalysisResult analysis = analyzeTransactionAndDependencies(tx, dependencies);
             if (analysis.timeLocked != null && !doesAcceptTimeLockedTransactions()) {
                 log.warn("Transaction {}, dependency of {} has a time lock value of {}", new Object[]{
@@ -1140,6 +1148,8 @@ public class Wallet implements Serializable, BlockChainListener, IsMultiBitClass
             throw new IllegalArgumentException("tx cannot be null");
         }
 
+        log.debug("commitTx called for tx " + tx.getHashAsString() + ", identityHashCode = " + System.identityHashCode(tx));
+
         tx.verify();
         lock.lock();
         try {
@@ -1242,19 +1252,19 @@ public class Wallet implements Serializable, BlockChainListener, IsMultiBitClass
         checkState(lock.isLocked());
         switch (pool) {
         case UNSPENT:
-            checkState(unspent.put(tx.getHash(), tx) == null);
+            unspent.put(tx.getHash(), tx);
             break;
         case SPENT:
-            checkState(spent.put(tx.getHash(), tx) == null);
+            spent.put(tx.getHash(), tx);
             break;
         case PENDING:
-            checkState(pending.put(tx.getHash(), tx) == null);
+            pending.put(tx.getHash(), tx);
             break;
         case DEAD:
-            checkState(dead.put(tx.getHash(), tx) == null);
+            dead.put(tx.getHash(), tx);
             break;
         case PENDING_INACTIVE:
-            checkState(pending.put(tx.getHash(), tx) == null);
+            pending.put(tx.getHash(), tx);
             break;
         default:
             throw new RuntimeException("Unknown wallet transaction type " + pool);
@@ -1262,6 +1272,7 @@ public class Wallet implements Serializable, BlockChainListener, IsMultiBitClass
         // This is safe even if the listener has been added before, as TransactionConfidence ignores duplicate
         // registration requests. That makes the code in the wallet simpler.
         tx.getConfidence().addEventListener(txConfidenceListener);
+        log.debug("Added txConfidenceListener " + txConfidenceListener + " to tx " + tx.getHashAsString());
     }
 
     /**
@@ -1573,6 +1584,10 @@ public class Wallet implements Serializable, BlockChainListener, IsMultiBitClass
             if (completeTx(request, enforceDefaultReferenceClientFeeRelayRules) == null)
                 return null;  // Not enough money! :-(
             commitTx(request.tx);
+            
+            request.tx.getConfidence().addEventListener(txConfidenceListener);
+            log.debug("Added txConfidenceListener " + txConfidenceListener + " to tx " + request.tx.getHashAsString() + ", identityHashCode = " + System.identityHashCode(request.tx));
+
             return request.tx;
         } catch (VerificationException e) {
             throw new RuntimeException(e);  // Cannot happen unless there's a bug, as we just created this ourselves.
@@ -3016,5 +3031,9 @@ public class Wallet implements Serializable, BlockChainListener, IsMultiBitClass
         } finally {
             lock.lock();
         }
+    }
+
+    public TransactionConfidence.Listener getTxConfidenceListener() {
+        return txConfidenceListener;
     }
 }
