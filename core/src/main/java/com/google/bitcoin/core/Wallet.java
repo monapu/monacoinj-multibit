@@ -595,10 +595,10 @@ public class Wallet implements Serializable, BlockChainListener, IsMultiBitClass
             if (!isPendingTransactionRelevant(tx)) {
                 // If the transaction is pending we know about it already but its transaction confidence may
                 // be different (ie seen by more peers).
-                log.debug("Transaction " + tx.getHashAsString() + " has confidence " + tx.getConfidence().getConfidenceType());
+                //log.debug("Transaction " + tx.getHashAsString() + " has confidence " + tx.getConfidence().getConfidenceType());
                 //if (tx.getConfidence().getConfidenceType() == ConfidenceType.PENDING ||
                 //        tx.getConfidence().getConfidenceType() == ConfidenceType.UNKNOWN) {
-                    invokeOnTransactionConfidenceChanged(tx);
+                //    invokeOnTransactionConfidenceChanged(tx);
                 //}
                 return;
             }
@@ -666,7 +666,7 @@ public class Wallet implements Serializable, BlockChainListener, IsMultiBitClass
             // between pools.
             EnumSet<Pool> containingPools = getContainingPools(tx);
             if (!containingPools.equals(EnumSet.noneOf(Pool.class))) {
-                log.debug("Received tx we already saw in a block or created ourselves: " + tx.getHashAsString());
+                log.debug("Received tx we already saw in a block or created ourselves: " + tx.getHashAsString() + ", identityHashCode = " + System.identityHashCode(tx));
                 return false;
             }
 
@@ -1272,7 +1272,7 @@ public class Wallet implements Serializable, BlockChainListener, IsMultiBitClass
         // This is safe even if the listener has been added before, as TransactionConfidence ignores duplicate
         // registration requests. That makes the code in the wallet simpler.
         tx.getConfidence().addEventListener(txConfidenceListener);
-        log.debug("Added txConfidenceListener " + txConfidenceListener + " to tx " + tx.getHashAsString());
+        // log.debug("Added txConfidenceListener " + txConfidenceListener + " to tx " + tx.getHashAsString() + ", identityHashCode = " + System.identityHashCode(tx));
     }
 
     /**
@@ -1583,11 +1583,12 @@ public class Wallet implements Serializable, BlockChainListener, IsMultiBitClass
         try {
             if (completeTx(request, enforceDefaultReferenceClientFeeRelayRules) == null)
                 return null;  // Not enough money! :-(
-            commitTx(request.tx);
-            
+ 
             request.tx.getConfidence().addEventListener(txConfidenceListener);
-            log.debug("Added txConfidenceListener " + txConfidenceListener + " to tx " + request.tx.getHashAsString() + ", identityHashCode = " + System.identityHashCode(request.tx));
+            // log.debug("Added txConfidenceListener " + txConfidenceListener + " to tx " + request.tx.getHashAsString() + ", identityHashCode = " + System.identityHashCode(request.tx));
 
+            commitTx(request.tx);
+             
             return request.tx;
         } catch (VerificationException e) {
             throw new RuntimeException(e);  // Cannot happen unless there's a bug, as we just created this ourselves.
@@ -1652,6 +1653,7 @@ public class Wallet implements Serializable, BlockChainListener, IsMultiBitClass
             return null;  // Not enough money.
         SendResult result = new SendResult();
         result.tx = tx;
+        
         // The tx has been committed to the pending pool by this point (via sendCoinsOffline -> commitTx), so it has
         // a txConfidenceListener registered. Once the tx is broadcast the peers will update the memory pool with the
         // count of seen peers, the memory pool will update the transaction confidence object, that will invoke the
@@ -1674,7 +1676,10 @@ public class Wallet implements Serializable, BlockChainListener, IsMultiBitClass
         Transaction tx = sendCoinsOffline(request, true);
         if (tx == null)
             return null;  // Not enough money.
+        
+        // Try PeerGroup.broadcastTransaction instead.
         peer.sendMessage(tx);
+        peer.addToMemoryPool(tx);
         return tx;
     }
 
@@ -2968,11 +2973,13 @@ public class Wallet implements Serializable, BlockChainListener, IsMultiBitClass
     //
     // Boilerplate for running event listeners - unlocks the wallet, runs, re-locks.
 
-    private void invokeOnTransactionConfidenceChanged(Transaction tx) {
+    void invokeOnTransactionConfidenceChanged(Transaction tx) {
         checkState(lock.isLocked());
         lock.unlock();
         try {
+            //log.debug("invokeOnTransactionConfidenceChanged number of listeners = " + eventListeners.size() + ", wallet " + this.getDescription() + ", transaction = " + tx.getHashAsString() + ", identityHashCode = " + System.identityHashCode(tx));
             for (WalletEventListener listener : eventListeners) {
+                //log.debug("invokeOnTransactionConfidenceChanged for listener " + listener + ", wallet " + this.getDescription() + ", transaction = " + tx.getHashAsString() + ", identityHashCode = " + System.identityHashCode(tx));
                 listener.onTransactionConfidenceChanged(this, tx);
             }
         } finally {

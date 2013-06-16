@@ -16,6 +16,7 @@
 
 package com.google.bitcoin.core;
 
+import com.google.bitcoin.core.WalletTransaction.Pool;
 import com.google.bitcoin.store.BlockStore;
 import com.google.bitcoin.store.BlockStoreException;
 import com.google.bitcoin.utils.Locks;
@@ -450,6 +451,8 @@ public class Peer {
     }
 
     private void processTransaction(Transaction tx) throws VerificationException, IOException {
+        // System.out.println("Peer#processTransaction tx = " + tx.getHashAsString() + ", identityHashCode = " + System.identityHashCode(tx));
+
         // Check a few basic syntax issues to ensure the received TX isn't nonsense.
         tx.verify();
         lock.lock();
@@ -460,6 +463,7 @@ public class Peer {
                 tx = memoryPool.seen(tx, getAddress());
             }
             final Transaction fTx = tx;
+            // System.out.println("Peer#processTransaction fTx = " + fTx.getHashAsString() + ", identityHashCode = " + System.identityHashCode(fTx));
             // Label the transaction as coming in from the P2P network (as opposed to being created by us, direct import,
             // etc). This helps the wallet decide how to risk analyze it later.
             fTx.getConfidence().setSource(TransactionConfidence.Source.NETWORK);
@@ -508,7 +512,16 @@ public class Peer {
                                 // Not much more we can do at this point.
                             }
                         });
-
+                    } else {
+                        // The transaction might be a pending transaction we already have.
+                        Transaction poolTx = memoryPool.get(tx.getHash());
+                        EnumSet<Pool> containingPools = wallet.getContainingPools(poolTx);
+                        if (containingPools.contains(Pool.PENDING)) {
+                            if (poolTx != null && poolTx.getConfidence() != null) {
+                                poolTx.getConfidence().markBroadcastBy(getAddress());
+                            }
+                        }
+                        
                     }
                 } catch (VerificationException e) {
                     log.error("Wallet failed to verify tx", e);
@@ -1355,5 +1368,12 @@ public class Peer {
      */
     public BloomFilter getBloomFilter() {
         return vBloomFilter;
+    }
+    
+    /**
+     * Add a transaction to the memory pool.
+     */
+    public void addToMemoryPool(Transaction tx) {
+        memoryPool.seen(tx, getAddress());
     }
 }

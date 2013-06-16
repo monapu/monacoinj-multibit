@@ -183,8 +183,10 @@ public class TransactionConfidence implements Serializable, IsMultiBitClass {
      * confidence object to determine the new depth.</p>
      */
     public void addEventListener(Listener listener) {
+        // System.out.println("TransactionConfidence#addEventListener adding listener " + listener);
         Preconditions.checkNotNull(listener);
         listeners.addIfAbsent(listener);
+        // System.out.println("TransactionConfidence#addEventListener number of listeners = " + listeners.size());
     }
 
     public void removeEventListener(Listener listener) {
@@ -250,17 +252,20 @@ public class TransactionConfidence implements Serializable, IsMultiBitClass {
      * @param address IP address of the peer, used as a proxy for identity.
      */
     public void markBroadcastBy(PeerAddress address) {
-        System.out.println("TransactionConfidence#markBroadcastBy peer " + address.toString());
+        // System.out.println("TransactionConfidence#markBroadcastBy peer " + address.toString());
 
         if (!broadcastBy.addIfAbsent(address))
             return;  // Duplicate.
         broadcastByCount++;
+        // System.out.println("TransactionConfidence#markBroadcastBy broadcastByCount =  " + broadcastByCount);
         synchronized (this) {
             if (getConfidenceType() == ConfidenceType.UNKNOWN) {
                 this.confidenceType = ConfidenceType.PENDING;
             }
         }
+        // System.out.println("TransactionConfidence#markBroadcastBy BEFORE runListeners");
         runListeners();
+        // System.out.println("TransactionConfidence#markBroadcastBy AFTER runListeners");
     }
 
     /**
@@ -406,9 +411,9 @@ public class TransactionConfidence implements Serializable, IsMultiBitClass {
     }
 
     private void runListeners() {
-        log.debug("Run listeners called for tx " + transaction.getHashAsString());
+        // System.out.println("TransactionConfidence#runListeners Run listeners called for tx " + transaction.getHashAsString() + ", numberofListeners = " + listeners.size());
         for (Listener listener : listeners) {
-            log.debug("Listeners called for listener " + listener);
+            // System.out.println("TransactionConfidence#runListeners Listeners called for listener " + listener);
             listener.onConfidenceChanged(transaction);
         }
     }
