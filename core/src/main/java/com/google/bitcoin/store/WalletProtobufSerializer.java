@@ -16,7 +16,18 @@
 
 package com.google.bitcoin.store;
 
-import static com.google.common.base.Preconditions.checkNotNull;
+import com.google.bitcoin.core.*;
+import com.google.bitcoin.core.TransactionConfidence.ConfidenceType;
+import com.google.bitcoin.crypto.EncryptedPrivateKey;
+import com.google.bitcoin.crypto.KeyCrypter;
+import com.google.bitcoin.crypto.KeyCrypterScrypt;
+import com.google.common.base.Preconditions;
+import com.google.protobuf.ByteString;
+import com.google.protobuf.TextFormat;
+import org.bitcoinj.wallet.Protos;
+import org.bitcoinj.wallet.Protos.Wallet.EncryptionType;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -24,13 +35,17 @@ import java.io.OutputStream;
 import java.math.BigInteger;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.ListIterator;
-import java.util.Map;
+import java.util.*;
 
 import org.bitcoinj.wallet.Protos;
 import org.bitcoinj.wallet.Protos.Wallet.EncryptionType;
+import org.bitcoinj.wallet.Protos.Key.Type;
+
+import com.google.bitcoin.crypto.EncryptedPrivateKey;
+import com.google.bitcoin.crypto.KeyCrypter;
+import com.google.bitcoin.crypto.KeyCrypterException;
+import com.google.bitcoin.crypto.KeyCrypterScrypt;
+
 import org.multibit.store.MultiBitWalletVersion;
 import org.multibit.store.WalletVersionException;
 import org.slf4j.Logger;
@@ -47,14 +62,12 @@ import com.google.bitcoin.core.TransactionInput;
 import com.google.bitcoin.core.TransactionOutPoint;
 import com.google.bitcoin.core.TransactionOutput;
 import com.google.bitcoin.core.Wallet;
-import com.google.bitcoin.core.WalletExtension;
 import com.google.bitcoin.core.WalletTransaction;
-import com.google.bitcoin.crypto.EncryptedPrivateKey;
-import com.google.bitcoin.crypto.KeyCrypter;
-import com.google.bitcoin.crypto.KeyCrypterScrypt;
 import com.google.common.base.Preconditions;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.TextFormat;
+
+import static com.google.common.base.Preconditions.checkNotNull;
 
 /**
  * Serialize and de-serialize a wallet to a byte stream containing a

@@ -16,15 +16,28 @@
 
 package com.google.bitcoin.core;
 
-import com.google.bitcoin.core.Transaction.SigHash;
-import com.google.bitcoin.core.Wallet.SendRequest;
-import com.google.bitcoin.core.WalletTransaction.Pool;
-import com.google.bitcoin.crypto.KeyCrypter;
-import com.google.bitcoin.crypto.KeyCrypterException;
-import com.google.bitcoin.crypto.KeyCrypterScrypt;
-import com.google.common.collect.Lists;
-import com.google.common.util.concurrent.ListenableFuture;
-import com.google.protobuf.ByteString;
+import static com.google.bitcoin.core.TestUtils.createFakeBlock;
+import static com.google.bitcoin.core.TestUtils.createFakeTx;
+import static com.google.bitcoin.core.TestUtils.createFakeTxWithChangeAddress;
+import static com.google.bitcoin.core.TestUtils.makeSolvedTestBlock;
+import static com.google.bitcoin.core.Utils.bitcoinValueToFriendlyString;
+import static com.google.bitcoin.core.Utils.toNanoCoins;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
+import java.math.BigInteger;
+import java.net.InetAddress;
+import java.security.SecureRandom;
+import java.util.Arrays;
+import java.util.Iterator;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Random;
+
 import org.bitcoinj.wallet.Protos;
 import org.bitcoinj.wallet.Protos.ScryptParameters;
 import org.bitcoinj.wallet.Protos.Wallet.EncryptionType;
@@ -34,18 +47,16 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.spongycastle.crypto.params.KeyParameter;
 
-import java.io.File;
-import java.math.BigInteger;
-import java.net.InetAddress;
-import java.security.SecureRandom;
-import java.util.*;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-
-import static com.google.bitcoin.core.TestUtils.*;
-import static com.google.bitcoin.core.Utils.bitcoinValueToFriendlyString;
-import static com.google.bitcoin.core.Utils.toNanoCoins;
-import static org.junit.Assert.*;
+import com.google.bitcoin.core.TestUtils.BlockPair;
+import com.google.bitcoin.core.Transaction.SigHash;
+import com.google.bitcoin.core.Wallet.SendRequest;
+import com.google.bitcoin.core.WalletTransaction.Pool;
+import com.google.bitcoin.crypto.KeyCrypter;
+import com.google.bitcoin.crypto.KeyCrypterException;
+import com.google.bitcoin.crypto.KeyCrypterScrypt;
+import com.google.common.collect.Lists;
+import com.google.common.util.concurrent.ListenableFuture;
+import com.google.protobuf.ByteString;
 
 public class WalletTest extends TestWithWallet {
     public Logger log = LoggerFactory.getLogger(WalletTest.class.getName());
