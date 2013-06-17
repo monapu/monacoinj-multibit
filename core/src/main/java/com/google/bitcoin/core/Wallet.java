@@ -1664,26 +1664,6 @@ public class Wallet implements Serializable, BlockChainListener, IsMultiBitClass
     }
 
     /**
-     * Sends coins to the given address, via the given {@link Peer}. Change is returned to {@link Wallet#getChangeAddress()}.
-     * If an exception is thrown by {@link Peer#sendMessage(Message)} the transaction is still committed, so the
-     * pending transaction must be broadcast <b>by you</b> at some other time. Note that a fee may be automatically added
-     * if one may be required for the transaction to be confirmed.
-     *
-     * @return The {@link Transaction} that was created or null if there was insufficient balance to send the coins.
-     * @throws IOException if there was a problem broadcasting the transaction
-     */
-    public Transaction sendCoins(Peer peer, SendRequest request) throws IOException {
-        Transaction tx = sendCoinsOffline(request, true);
-        if (tx == null)
-            return null;  // Not enough money.
-        
-        // Try PeerGroup.broadcastTransaction instead.
-        peer.sendMessage(tx);
-        peer.addToMemoryPool(tx);
-        return tx;
-    }
-
-    /**
      * Given a spend request containing an incomplete transaction, makes it valid by adding inputs and outputs according
      * to the instructions in the request. The transaction in the request is modified by this method.
      *

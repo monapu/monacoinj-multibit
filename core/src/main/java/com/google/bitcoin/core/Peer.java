@@ -1369,11 +1369,4 @@ public class Peer {
     public BloomFilter getBloomFilter() {
         return vBloomFilter;
     }
-    
-    /**
-     * Add a transaction to the memory pool.
-     */
-    public void addToMemoryPool(Transaction tx) {
-        memoryPool.seen(tx, getAddress());
-    }
 }
