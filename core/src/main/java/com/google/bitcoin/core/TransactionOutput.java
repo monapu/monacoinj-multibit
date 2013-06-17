@@ -16,6 +16,8 @@
 
 package com.google.bitcoin.core;
 
+import com.google.bitcoin.script.Script;
+import com.google.bitcoin.script.ScriptBuilder;
 import com.google.bitcoin.IsMultiBitClass;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -90,7 +92,7 @@ public class TransactionOutput extends ChildMessage implements Serializable, IsM
      * {@link Transaction#addOutput(java.math.BigInteger, Address)} instead of creating a TransactionOutput directly.
      */
     public TransactionOutput(NetworkParameters params, Transaction parent, BigInteger value, Address to) {
-        this(params, parent, value, Script.createOutputScript(to));
+        this(params, parent, value, ScriptBuilder.createOutputScript(to).getProgram());
     }
 
     /**
@@ -99,7 +101,7 @@ public class TransactionOutput extends ChildMessage implements Serializable, IsM
      * {@link Transaction#addOutput(java.math.BigInteger, ECKey)} instead of creating an output directly.
      */
     public TransactionOutput(NetworkParameters params, Transaction parent, BigInteger value, ECKey to) {
-        this(params, parent, value, Script.createOutputScript(to));
+        this(params, parent, value, ScriptBuilder.createOutputScript(to).getProgram());
     }
 
     public TransactionOutput(NetworkParameters params, Transaction parent, BigInteger value, byte[] scriptBytes) {
@@ -114,7 +116,7 @@ public class TransactionOutput extends ChildMessage implements Serializable, IsM
     public Script getScriptPubKey() throws ScriptException {
         if (scriptPubKey == null) {
             maybeParse();
-            scriptPubKey = new Script(params, scriptBytes, 0, scriptBytes.length);
+            scriptPubKey = new Script(scriptBytes);
         }
         return scriptPubKey;
     }
@@ -138,7 +140,7 @@ public class TransactionOutput extends ChildMessage implements Serializable, IsM
     @Override
     protected void bitcoinSerializeToStream(OutputStream stream) throws IOException {
         checkNotNull(scriptBytes);
-        Utils.uint64ToByteStreamLE(getValue(), stream);
+        Utils.int64ToByteStreamLE(getValue().longValue(), stream);
         // TODO: Move script serialization into the Script class, where it belongs.
         stream.write(new VarInt(scriptBytes.length).encode());
         stream.write(scriptBytes);
@@ -153,6 +155,15 @@ public class TransactionOutput extends ChildMessage implements Serializable, IsM
         return value;
     }
 
+    /**
+     * Sets the value of this output in nanocoins.
+     */
+    public void setValue(BigInteger value) {
+        checkNotNull(value);
+        unCache();
+        this.value = value;
+    }
+
     int getIndex() {
         checkNotNull(parentTransaction);
         for (int i = 0; i < parentTransaction.getOutputs().size(); i++) {
@@ -161,6 +172,19 @@ public class TransactionOutput extends ChildMessage implements Serializable, IsM
         }
         // Should never happen.
         throw new RuntimeException("Output linked to wrong parent transaction?");
+    }
+
+    /**
+     * Gets the minimum value for a txout of this size to be considered non-dust by a reference client (and thus relayed).
+     * See: CTxOut::IsDust() in the reference client.
+     *
+     * @param feePerKbRequired The fee required per kilobyte. Note that this is the same as the reference client's -minrelaytxfee * 3
+     *                         If you want a safe default, use {@link Transaction#REFERENCE_DEFAULT_MIN_TX_FEE}*3
+     */
+    public BigInteger getMinNonDustValue(BigInteger feePerKbRequired) {
+        // Note we skip the *3 as that should be considered in the parameter and we add one to account for loss of precision
+        // (1/1000 chance we require too much fee, 999/1000 chance we get the exact right value...)
+        return feePerKbRequired.multiply(BigInteger.valueOf(this.bitcoinSerialize().length + 148)).divide(BigInteger.valueOf(1000)).add(BigInteger.ONE);
     }
 
     /**
@@ -226,8 +250,8 @@ public class TransactionOutput extends ChildMessage implements Serializable, IsM
     @Override
     public String toString() {
         try {
-            return "TxOut of " + Utils.bitcoinValueToFriendlyString(value) + " to " + getScriptPubKey().getToAddress()
-                    .toString() + " script:" + getScriptPubKey().toString();
+            return "TxOut of " + Utils.bitcoinValueToFriendlyString(value) + " to " +
+                    getScriptPubKey().getToAddress(params).toString() + " script:" + getScriptPubKey().toString();
         } catch (ScriptException e) {
             throw new RuntimeException(e);
         }

@@ -16,6 +16,8 @@
 
 package com.google.bitcoin.core;
 
+import com.google.bitcoin.params.MainNetParams;
+import com.google.bitcoin.params.UnitTestParams;
 import com.google.bitcoin.store.BlockStore;
 import com.google.bitcoin.store.MemoryBlockStore;
 import org.junit.Before;
@@ -77,7 +79,7 @@ public class LazyParseByteCacheTest {
     
     @Before
     public void setUp() throws Exception {
-        unitTestParams = NetworkParameters.unitTests();
+        unitTestParams = UnitTestParams.get();
         wallet = new Wallet(unitTestParams);
         wallet.addKey(new ECKey());
 
@@ -85,11 +87,11 @@ public class LazyParseByteCacheTest {
         
         Transaction tx1 = createFakeTx(unitTestParams,
         		Utils.toNanoCoins(2, 0),
-        		wallet.keychain.get(0).toAddress(unitTestParams));
+        		wallet.getKeys().get(0).toAddress(unitTestParams));
         
         //add a second input so can test granularity of byte cache.
         Transaction prevTx = new Transaction(unitTestParams);
-        TransactionOutput prevOut = new TransactionOutput(unitTestParams, prevTx, Utils.toNanoCoins(1, 0), wallet.keychain.get(0).toAddress(unitTestParams));
+        TransactionOutput prevOut = new TransactionOutput(unitTestParams, prevTx, Utils.toNanoCoins(1, 0), wallet.getKeys().get(0).toAddress(unitTestParams));
         prevTx.addOutput(prevOut);
         // Connect it.
         tx1.addInput(prevOut);
@@ -133,28 +135,28 @@ public class LazyParseByteCacheTest {
     
     @Test
     public void testTransactionsLazyRetain() throws Exception {
-    	testTransaction(NetworkParameters.prodNet(), txMessage, false, true, true);
+    	testTransaction(MainNetParams.get(), txMessage, false, true, true);
     	testTransaction(unitTestParams, tx1BytesWithHeader, false, true, true);
     	testTransaction(unitTestParams, tx2BytesWithHeader, false, true, true);
     }
     
     @Test
     public void testTransactionsLazyNoRetain() throws Exception {
-    	testTransaction(NetworkParameters.prodNet(), txMessage, false, true, false);
+    	testTransaction(MainNetParams.get(), txMessage, false, true, false);
     	testTransaction(unitTestParams, tx1BytesWithHeader, false, true, false);
     	testTransaction(unitTestParams, tx2BytesWithHeader, false, true, false);
     }
     
     @Test
     public void testTransactionsNoLazyNoRetain() throws Exception {
-    	testTransaction(NetworkParameters.prodNet(), txMessage, false, false, false);
+    	testTransaction(MainNetParams.get(), txMessage, false, false, false);
     	testTransaction(unitTestParams, tx1BytesWithHeader, false, false, false);
     	testTransaction(unitTestParams, tx2BytesWithHeader, false, false, false);
     }
     
     @Test
     public void testTransactionsNoLazyRetain() throws Exception {
-    	testTransaction(NetworkParameters.prodNet(), txMessage, false, false, true);
+    	testTransaction(MainNetParams.get(), txMessage, false, false, true);
     	testTransaction(unitTestParams, tx1BytesWithHeader, false, false, true);
     	testTransaction(unitTestParams, tx2BytesWithHeader, false, false, true);
     }

@@ -73,7 +73,8 @@ public class VersionMessage extends Message {
     public boolean relayTxesBeforeFilter;
 
     /** The version of this library release, as a string. */
-    public static final String BITCOINJ_VERSION = "0.8";
+    public static final String BITCOINJ_VERSION = "0.9-SNAPSHOT";
+
     /** The value that is prepended to the subVer field of this application. */
     public static final String LIBRARY_SUBVER = "/BitCoinJ:" + BITCOINJ_VERSION + "/";
 
@@ -101,8 +102,8 @@ public class VersionMessage extends Message {
             // We hard-code the IPv4 localhost address here rather than use InetAddress.getLocalHost() because some
             // mobile phones have broken localhost DNS entries, also, this is faster.
             final byte[] localhost = new byte[] { 127, 0, 0, 1 };
-            myAddr = new PeerAddress(InetAddress.getByAddress(localhost), params.port, 0);
-            theirAddr = new PeerAddress(InetAddress.getByAddress(localhost), params.port, 0);
+            myAddr = new PeerAddress(InetAddress.getByAddress(localhost), params.getPort(), 0);
+            theirAddr = new PeerAddress(InetAddress.getByAddress(localhost), params.getPort(), 0);
         } catch (UnknownHostException e) {
             throw new RuntimeException(e);  // Cannot happen (illegal IP length).
         }

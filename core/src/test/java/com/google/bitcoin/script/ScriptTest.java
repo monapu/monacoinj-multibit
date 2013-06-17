@@ -14,8 +14,11 @@
  * limitations under the License.
  */
 
-package com.google.bitcoin.core;
+package com.google.bitcoin.script;
 
+import com.google.bitcoin.core.*;
+import com.google.bitcoin.params.TestNet3Params;
+import com.google.common.collect.Lists;
 import org.junit.Test;
 import org.spongycastle.util.encoders.Hex;
 
@@ -28,6 +31,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 
+import static com.google.bitcoin.script.ScriptOpCodes.OP_INVALIDOPCODE;
 import static org.junit.Assert.*;
 
 public class ScriptTest {
@@ -38,12 +42,12 @@ public class ScriptTest {
     static final String pubkeyProg = "76a91433e81a941e64cda12c6a299ed322ddbdd03f8d0e88ac";
 
 
-    static final NetworkParameters params = NetworkParameters.testNet();
+    static final NetworkParameters params = TestNet3Params.get();
 
     @Test
     public void testScriptSig() throws Exception {
         byte[] sigProgBytes = Hex.decode(sigProg);
-        Script script = new Script(params, sigProgBytes, 0, sigProgBytes.length);
+        Script script = new Script(sigProgBytes);
         // Test we can extract the from address.
         byte[] hash160 = Utils.sha256hash160(script.getPubKey());
         Address a = new Address(params, hash160);
@@ -54,35 +58,41 @@ public class ScriptTest {
     public void testScriptPubKey() throws Exception {
         // Check we can extract the to address
         byte[] pubkeyBytes = Hex.decode(pubkeyProg);
-        Script pubkey = new Script(params, pubkeyBytes, 0, pubkeyBytes.length);
+        Script pubkey = new Script(pubkeyBytes);
         Address toAddr = new Address(params, pubkey.getPubKeyHash());
         assertEquals("mkFQohBpy2HDXrCwyMrYL5RtfrmeiuuPY2", toAddr.toString());
     }
 
     @Test
+    public void testMultiSig() throws Exception {
+        List<ECKey> keys = Lists.newArrayList(new ECKey(), new ECKey(), new ECKey());
+        assertTrue(ScriptBuilder.createMultiSigOutputScript(2, keys).isSentToMultiSig());
+        assertTrue(ScriptBuilder.createMultiSigOutputScript(3, keys).isSentToMultiSig());
+        assertFalse(ScriptBuilder.createOutputScript(new ECKey()).isSentToMultiSig());
+        try {
+            // Fail if we ask for more signatures than keys.
+            Script.createMultiSigOutputScript(4, keys);
+            fail();
+        } catch (Throwable e) {
+            // Expected.
+        }
+        try {
+            // Must have at least one signature required.
+            Script.createMultiSigOutputScript(0, keys);
+        } catch (Throwable e) {
+            // Expected.
+        }
+        // Actual execution is tested by the data driven tests.
+    }
+
+    @Test
     public void testIp() throws Exception {
         byte[] bytes = Hex.decode("41043e96222332ea7848323c08116dddafbfa917b8e37f0bdf63841628267148588a09a43540942d58d49717ad3fabfe14978cf4f0a8b84d2435dad16e9aa4d7f935ac");
-        Script s = new Script(params, bytes, 0, bytes.length);
+        Script s = new Script(bytes);
         assertTrue(s.isSentToRawPubKey());
     }
     
-    private static HashMap<String, Integer> mapOpNames;
-
-    private synchronized static void initMapOpNames() {
-        if (mapOpNames == null) {
-            mapOpNames = new HashMap<String, Integer>();
-            for (int op = Script.OP_NOP; op <= Script.OP_NOP10; op++) {
-                String name = Script.getOpCodeName((byte)op);
-                if (name.startsWith("NON_OP("))
-                    continue;
-                // The reference client's implementation supports OP_*, but we only support *
-                mapOpNames.put(name, op);
-            }
-        }
-    }
-
-    private Script parseScriptString(NetworkParameters params, String string) throws Exception {
-        initMapOpNames();
+    private Script parseScriptString(String string) throws Exception {
         String[] words = string.split("[ \\t\\n]");
         
         UnsafeByteArrayOutputStream out = new UnsafeByteArrayOutputStream();
@@ -93,8 +103,8 @@ public class ScriptTest {
             if (w.matches("^-?[0-9]*$")) {
                 // Number
                 long val = Long.parseLong(w);
-                if (val == -1 || (val >= 1 && val <= 16))
-                    out.write((int)val + Script.OP_1 - 1);
+                if (val >= -1 && val <= 16)
+                    out.write(Script.encodeToOpN((int)val));
                 else
                     Script.writeBytes(out, Utils.reverseBytes(Utils.encodeMPI(BigInteger.valueOf(val), false)));
             } else if (w.matches("^0x[0-9a-fA-F]*$")) {
@@ -104,26 +114,26 @@ public class ScriptTest {
                 // Single-quoted string, pushed as data. NOTE: this is poor-man's
                 // parsing, spaces/tabs/newlines in single-quoted strings won't work.
                 Script.writeBytes(out, w.substring(1, w.length() - 1).getBytes(Charset.forName("UTF-8")));
-            } else if (mapOpNames.containsKey(w)) {
+            } else if (ScriptOpCodes.getOpCode(w) != OP_INVALIDOPCODE) {
                 // opcode, e.g. OP_ADD or OP_1:
-                out.write(mapOpNames.get(w));
-            } else if (w.startsWith("OP_") && mapOpNames.containsKey(w.substring(3))) {
+                out.write(ScriptOpCodes.getOpCode(w));
+            } else if (w.startsWith("OP_") && ScriptOpCodes.getOpCode(w.substring(3)) != OP_INVALIDOPCODE) {
                 // opcode, e.g. OP_ADD or OP_1:
-                out.write(mapOpNames.get(w.substring(3)));
+                out.write(ScriptOpCodes.getOpCode(w.substring(3)));
             } else {
                 throw new RuntimeException("Invalid Data");
             }                        
         }
         
-        return new Script(params, out.toByteArray(), 0, out.size());
+        return new Script(out.toByteArray());
     }
     
     @Test
     public void dataDrivenValidScripts() throws Exception {
         BufferedReader in = new BufferedReader(new InputStreamReader(
                 getClass().getResourceAsStream("script_valid.json"), Charset.forName("UTF-8")));
-        
-        NetworkParameters params = NetworkParameters.testNet();
+
+        NetworkParameters params = TestNet3Params.get();
         
         // Poor man's JSON parser (because pulling in a lib for this is overkill)
         String script = "";
@@ -136,10 +146,19 @@ public class ScriptTest {
             if (line.trim().endsWith("],") || line.trim().endsWith("]")) {
                 String[] scripts = script.split(",");
 
-                Script scriptSig = parseScriptString(params, scripts[0].replaceAll("[\"\\[\\]]", "").trim());
-                Script scriptPubKey = parseScriptString(params, scripts[1].replaceAll("[\"\\[\\]]", "").trim());
+                scripts[0] = scripts[0].replaceAll("[\"\\[\\]]", "").trim();
+                scripts[1] = scripts[1].replaceAll("[\"\\[\\]]", "").trim();
+                Script scriptSig = parseScriptString(scripts[0]);
+                Script scriptPubKey = parseScriptString(scripts[1]);
 
-                scriptSig.correctlySpends(new Transaction(params), 0, scriptPubKey, true);
+                try {
+                    scriptSig.correctlySpends(new Transaction(params), 0, scriptPubKey, true);
+                } catch (ScriptException e) {
+                    System.err.println("scriptSig: " + scripts[0]);
+                    System.err.println("scriptPubKey: " + scripts[1]);
+                    System.err.flush();
+                    throw e;
+                }
                 script = "";
             }
         }
@@ -150,8 +169,8 @@ public class ScriptTest {
     public void dataDrivenInvalidScripts() throws Exception {
         BufferedReader in = new BufferedReader(new InputStreamReader(
                 getClass().getResourceAsStream("script_invalid.json"), Charset.forName("UTF-8")));
-        
-        NetworkParameters params = NetworkParameters.testNet();
+
+        NetworkParameters params = TestNet3Params.get();
         
         // Poor man's JSON parser (because pulling in a lib for this is overkill)
         String script = "";
@@ -164,8 +183,8 @@ public class ScriptTest {
             if (line.trim().endsWith("],") || line.trim().equals("]")) {
                 String[] scripts = script.split(",");
                 try {                    
-                    Script scriptSig = parseScriptString(params, scripts[0].replaceAll("[\"\\[\\]]", "").trim());
-                    Script scriptPubKey = parseScriptString(params, scripts[1].replaceAll("[\"\\[\\]]", "").trim());
+                    Script scriptSig = parseScriptString(scripts[0].replaceAll("[\"\\[\\]]", "").trim());
+                    Script scriptPubKey = parseScriptString(scripts[1].replaceAll("[\"\\[\\]]", "").trim());
 
                     scriptSig.correctlySpends(new Transaction(params), 0, scriptPubKey, true);
                     fail();
@@ -272,8 +291,8 @@ public class ScriptTest {
     public void dataDrivenValidTransactions() throws Exception {
         BufferedReader in = new BufferedReader(new InputStreamReader(
                 getClass().getResourceAsStream("tx_valid.json"), Charset.forName("UTF-8")));
-        
-        NetworkParameters params = NetworkParameters.testNet();
+
+        NetworkParameters params = TestNet3Params.get();
         
         // Poor man's (aka. really, really poor) JSON parser (because pulling in a lib for this is probably not overkill)
         List<JSONObject> tx = new ArrayList<JSONObject>(3);
@@ -295,7 +314,7 @@ public class ScriptTest {
                     int index = input.list.get(1).integer;
                     String script = input.list.get(2).string;
                     Sha256Hash sha256Hash = new Sha256Hash(Hex.decode(hash.getBytes(Charset.forName("UTF-8"))));
-                    scriptPubKeys.put(new TransactionOutPoint(params, index, sha256Hash), parseScriptString(params, script));
+                    scriptPubKeys.put(new TransactionOutPoint(params, index, sha256Hash), parseScriptString(script));
                 }
 
                 byte[] bytes = tx.get(0).list.get(1).string.getBytes(Charset.forName("UTF-8"));
@@ -322,8 +341,8 @@ public class ScriptTest {
     public void dataDrivenInvalidTransactions() throws Exception {
         BufferedReader in = new BufferedReader(new InputStreamReader(
                 getClass().getResourceAsStream("tx_invalid.json"), Charset.forName("UTF-8")));
-        
-        NetworkParameters params = NetworkParameters.testNet();
+
+        NetworkParameters params = TestNet3Params.get();
         
         // Poor man's (aka. really, really poor) JSON parser (because pulling in a lib for this is probably overkill)
         List<JSONObject> tx = new ArrayList<JSONObject>(1);
@@ -346,7 +365,7 @@ public class ScriptTest {
                     int index = input.list.get(1).integer;
                     String script = input.list.get(2).string;
                     Sha256Hash sha256Hash = new Sha256Hash(Hex.decode(hash.getBytes(Charset.forName("UTF-8"))));
-                    scriptPubKeys.put(new TransactionOutPoint(params, index, sha256Hash), parseScriptString(params, script));
+                    scriptPubKeys.put(new TransactionOutPoint(params, index, sha256Hash), parseScriptString(script));
                 }
 
                 byte[] bytes = tx.get(0).list.get(1).string.getBytes(Charset.forName("UTF-8"));

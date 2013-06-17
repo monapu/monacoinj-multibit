@@ -17,11 +17,16 @@
 package com.google.bitcoin.core;
 
 import com.google.common.base.Preconditions;
+import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.SettableFuture;
 
 import java.io.Serializable;
 import java.math.BigInteger;
 import java.util.ListIterator;
 import java.util.concurrent.CopyOnWriteArrayList;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.bitcoin.IsMultiBitClass;
 
@@ -56,6 +61,8 @@ import com.google.bitcoin.IsMultiBitClass;
 public class TransactionConfidence implements Serializable, IsMultiBitClass {
     private static final long serialVersionUID = 4577920141400556444L;
 
+    private static final Logger log = LoggerFactory.getLogger(TransactionConfidence.class);
+
     /**
      * The peers that have announced the transaction to us. Network nodes don't have stable identities, so we use
      * IP address as an approximation. It's obviously vulnerable to being gamed if we allow arbitrary people to connect
@@ -81,21 +88,14 @@ public class TransactionConfidence implements Serializable, IsMultiBitClass {
         BUILDING(1),
 
         /**
-         * If NOT_SEEN_IN_CHAIN, then the transaction is pending and should be included shortly, as long as it is being
+         * If PENDING, then the transaction is unconfirmed and should be included shortly, as long as it is being
          * announced and is considered valid by the network. A pending transaction will be announced if the containing
          * wallet has been attached to a live {@link PeerGroup} using {@link PeerGroup#addWallet(Wallet)}.
          * You can estimate how likely the transaction is to be included by connecting to a bunch of nodes then measuring
          * how many announce it, using {@link com.google.bitcoin.core.TransactionConfidence#numBroadcastPeers()}.
          * Or if you saw it from a trusted peer, you can assume it's valid and will get mined sooner or later as well.
          */
-        NOT_SEEN_IN_CHAIN(2),
-
-        /**
-         * If NOT_IN_BEST_CHAIN, then the transaction has been included in a block, but that block is on a fork. A
-         * transaction can change from BUILDING to NOT_IN_BEST_CHAIN and vice versa if a reorganization takes place,
-         * due to a split in the consensus.
-         */
-        NOT_IN_BEST_CHAIN(3),
+        PENDING(2),
 
         /**
          * If DEAD, then it means the transaction won't confirm unless there is another re-org,
@@ -123,8 +123,7 @@ public class TransactionConfidence implements Serializable, IsMultiBitClass {
             switch (value) {
             case 0: return UNKNOWN;
             case 1: return BUILDING;
-            case 2: return NOT_SEEN_IN_CHAIN;
-            case 3: return NOT_IN_BEST_CHAIN;
+            case 2: return PENDING;
             case 4: return DEAD;
             default: return null;
             }
@@ -184,8 +183,10 @@ public class TransactionConfidence implements Serializable, IsMultiBitClass {
      * confidence object to determine the new depth.</p>
      */
     public void addEventListener(Listener listener) {
+        // System.out.println("TransactionConfidence#addEventListener adding listener " + listener);
         Preconditions.checkNotNull(listener);
         listeners.addIfAbsent(listener);
+        // System.out.println("TransactionConfidence#addEventListener number of listeners = " + listeners.size());
     }
 
     public void removeEventListener(Listener listener) {
@@ -205,12 +206,13 @@ public class TransactionConfidence implements Serializable, IsMultiBitClass {
 
     /**
      * The chain height at which the transaction appeared, if it has been seen in the best chain. Automatically sets
-     * the current type to {@link ConfidenceType#BUILDING}.
+     * the current type to {@link ConfidenceType#BUILDING} and depth to one.
      */
     public synchronized void setAppearedAtChainHeight(int appearedAtChainHeight) {
         if (appearedAtChainHeight < 0)
             throw new IllegalArgumentException("appearedAtChainHeight out of range");
         this.appearedAtChainHeight = appearedAtChainHeight;
+        this.depth = 1;
         setConfidenceType(ConfidenceType.BUILDING);
     }
 
@@ -231,6 +233,11 @@ public class TransactionConfidence implements Serializable, IsMultiBitClass {
             if (confidenceType == this.confidenceType)
                 return;
             this.confidenceType = confidenceType;
+            if (confidenceType == ConfidenceType.PENDING) {
+                depth = 0;
+                appearedAtChainHeight = -1;
+                workDone = BigInteger.ZERO;
+            }
         }
         runListeners();
     }
@@ -239,21 +246,26 @@ public class TransactionConfidence implements Serializable, IsMultiBitClass {
     /**
      * Called by a {@link Peer} when a transaction is pending and announced by a peer. The more peers announce the
      * transaction, the more peers have validated it (assuming your internet connection is not being intercepted).
-     * If confidence is currently unknown, sets it to {@link ConfidenceType#NOT_SEEN_IN_CHAIN}. Listeners will be
+     * If confidence is currently unknown, sets it to {@link ConfidenceType#PENDING}. Listeners will be
      * invoked in this case.
      *
      * @param address IP address of the peer, used as a proxy for identity.
      */
     public void markBroadcastBy(PeerAddress address) {
+        // System.out.println("TransactionConfidence#markBroadcastBy peer " + address.toString());
+
         if (!broadcastBy.addIfAbsent(address))
             return;  // Duplicate.
         broadcastByCount++;
+
         synchronized (this) {
             if (getConfidenceType() == ConfidenceType.UNKNOWN) {
-                this.confidenceType = ConfidenceType.NOT_SEEN_IN_CHAIN;
+                this.confidenceType = ConfidenceType.PENDING;
             }
         }
+        // System.out.println("TransactionConfidence#markBroadcastBy BEFORE runListeners");
         runListeners();
+        // System.out.println("TransactionConfidence#markBroadcastBy AFTER runListeners");
     }
 
     /**
@@ -294,11 +306,8 @@ public class TransactionConfidence implements Serializable, IsMultiBitClass {
             case DEAD:
                 builder.append("Dead: overridden by double spend and will not confirm.");
                 break;
-            case NOT_IN_BEST_CHAIN: 
-                builder.append("Seen in side chain but not best chain.");
-                break;
-            case NOT_SEEN_IN_CHAIN:
-                builder.append("Not seen in chain.");
+            case PENDING:
+                builder.append("Pending/unconfirmed.");
                 break;
             case BUILDING:
                 builder.append(String.format("Appeared in best chain at height %d, depth %d, work done %s.",
@@ -327,23 +336,16 @@ public class TransactionConfidence implements Serializable, IsMultiBitClass {
     }
 
     /**
-     * Depth in the chain is an approximation of how much time has elapsed since the transaction has been confirmed. On
-     * average there is supposed to be a new block every 10 minutes, but the actual rate may vary. The reference
+     * <p>Depth in the chain is an approximation of how much time has elapsed since the transaction has been confirmed.
+     * On average there is supposed to be a new block every 10 minutes, but the actual rate may vary. The reference
      * (Satoshi) implementation considers a transaction impractical to reverse after 6 blocks, but as of EOY 2011 network
      * security is high enough that often only one block is considered enough even for high value transactions. For low
-     * value transactions like songs, or other cheap items, no blocks at all may be necessary.<p>
+     * value transactions like songs, or other cheap items, no blocks at all may be necessary.</p>
      *     
-     * If the transaction appears in the top block, the depth is one. If the transaction does not appear in the best
-     * chain yet, throws IllegalStateException, so use {@link com.google.bitcoin.core.TransactionConfidence#getConfidenceType()}
-     * to check first.
-     *
-     * @throws IllegalStateException if confidence type != BUILDING.
-     * @return depth
+     * <p>If the transaction appears in the top block, the depth is one. If it's anything else (pending, dead, unknown)
+     * the depth is zero.</p>
      */
     public synchronized int getDepthInBlocks() {
-        if (getConfidenceType() != ConfidenceType.BUILDING) {
-            throw new IllegalStateException("Confidence type is not BUILDING");
-        }
         return depth;
     }
 
@@ -358,15 +360,10 @@ public class TransactionConfidence implements Serializable, IsMultiBitClass {
      * Returns the estimated amount of work (number of hashes performed) on this transaction. Work done is a measure of
      * security that is related to depth in blocks, but more predictable: the network will always attempt to produce six
      * blocks per hour by adjusting the difficulty target. So to know how much real computation effort is needed to
-     * reverse a transaction, counting blocks is not enough.
-     *
-     * @throws IllegalStateException if confidence type is not BUILDING
+     * reverse a transaction, counting blocks is not enough. If a transaction has not confirmed, the result is zero.
      * @return estimated number of hashes needed to reverse the transaction.
      */
     public synchronized BigInteger getWorkDone() {
-        if (getConfidenceType() != ConfidenceType.BUILDING) {
-            throw new IllegalStateException("Confidence type is not BUILDING");
-        }
         return workDone;
     }
 
@@ -414,8 +411,11 @@ public class TransactionConfidence implements Serializable, IsMultiBitClass {
     }
 
     private void runListeners() {
-        for (Listener listener : listeners)
+        // System.out.println("TransactionConfidence#runListeners Run listeners called for tx " + transaction.getHashAsString() + ", numberofListeners = " + listeners.size());
+        for (Listener listener : listeners) {
+            // System.out.println("TransactionConfidence#runListeners Listeners called for listener " + listener);
             listener.onConfidenceChanged(transaction);
+        }
     }
 
     /**
@@ -436,6 +436,29 @@ public class TransactionConfidence implements Serializable, IsMultiBitClass {
      */
     public synchronized void setSource(Source source) {
         this.source = source;
+    }
+
+    /**
+     * Returns a future that completes when the transaction has been confirmed by "depth" blocks. For instance setting
+     * depth to one will wait until it appears in a block on the best chain, and zero will wait until it has been seen
+     * on the network.
+     */
+    public ListenableFuture<Transaction> getDepthFuture(final int depth) {
+        final SettableFuture<Transaction> result = SettableFuture.create();
+        synchronized (this) {
+            if (getDepthInBlocks() >= depth) {
+                result.set(transaction);
+            }
+            addEventListener(new Listener() {
+                @Override public void onConfidenceChanged(Transaction tx) {
+                    if (getDepthInBlocks() >= depth) {
+                        removeEventListener(this);
+                        result.set(transaction);
+                    }
+                }
+            });
+        }
+        return result;
     }
 
     public int getBroadcastByCount() {

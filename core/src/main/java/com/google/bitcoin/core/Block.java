@@ -16,7 +16,10 @@
 
 package com.google.bitcoin.core;
 
+import com.google.bitcoin.script.Script;
+import com.google.bitcoin.script.ScriptBuilder;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -26,7 +29,6 @@ import java.io.ObjectInputStream;
 import java.io.OutputStream;
 import java.math.BigInteger;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 
@@ -66,10 +68,7 @@ public class Block extends Message {
     public static final int MAX_BLOCK_SIGOPS = MAX_BLOCK_SIZE / 50;
 
     /** A value for difficultyTarget (nBits) that allows half of all possible hash solutions. Used in unit testing. */
-    static final long EASIEST_DIFFICULTY_TARGET = 0x207fFFFFL;
-
-    // For unit testing. If not zero, use this instead of the current time.
-    static long fakeClock = 0;
+    public static final long EASIEST_DIFFICULTY_TARGET = 0x207fFFFFL;
 
     // Fields defined as part of the protocol format.
     private long version;
@@ -534,10 +533,26 @@ public class Block extends Message {
      */
     @Override
     public String toString() {
-        StringBuffer s = new StringBuffer("v" + version + " block: \n" + "   previous block: "
-                + getPrevBlockHash().toString() + "\n" + "   merkle root: " + getMerkleRoot().toString() + "\n"
-                + "   time: [" + time + "] " + new Date(time * 1000).toString() + "\n"
-                + "   difficulty target (nBits): " + difficultyTarget + "\n" + "   nonce: " + nonce + "\n");
+        StringBuilder s = new StringBuilder("v");
+        s.append(version);
+        s.append(" block: \n");
+        s.append("   previous block: ");
+        s.append(getPrevBlockHash());
+        s.append("\n");
+        s.append("   merkle root: ");
+        s.append(getMerkleRoot());
+        s.append("\n");
+        s.append("   time: [");
+        s.append(time);
+        s.append("] ");
+        s.append(new Date(time * 1000));
+        s.append("\n");
+        s.append("   difficulty target (nBits): ");
+        s.append(difficultyTarget);
+        s.append("\n");
+        s.append("   nonce: ");
+        s.append(nonce);
+        s.append("\n");
         if (transactions != null && transactions.size() > 0) {
             s.append("   with ").append(transactions.size()).append(" transaction(s):\n");
             for (Transaction tx : transactions) {
@@ -548,13 +563,13 @@ public class Block extends Message {
     }
 
     /**
-     * Finds a value of nonce that makes the blocks hash lower than the difficulty target. This is called mining, but
-     * solve() is far too slow to do real mining with. It exists only for unit testing purposes and is not a part of
-     * the public API.
+     * <p>Finds a value of nonce that makes the blocks hash lower than the difficulty target. This is called mining, but
+     * solve() is far too slow to do real mining with. It exists only for unit testing purposes.
      *
-     * This can loop forever if a solution cannot be found solely by incrementing nonce. It doesn't change extraNonce.
+     * <p>This can loop forever if a solution cannot be found solely by incrementing nonce. It doesn't change
+     * extraNonce.</p>
      */
-    void solve() {
+    public void solve() {
         maybeParseHeader();
         while (true) {
             try {
@@ -609,7 +624,7 @@ public class Block extends Message {
     private void checkTimestamp() throws VerificationException {
         maybeParseHeader();
         // Allow injection of a fake clock to allow unit testing.
-        long currentTime = fakeClock != 0 ? fakeClock : System.currentTimeMillis() / 1000;
+        long currentTime = Utils.now().getTime()/1000;
         if (time > currentTime + ALLOWED_TIME_DRIFT)
             throw new VerificationException("Block too far in future");
     }
@@ -847,7 +862,7 @@ public class Block extends Message {
         return new Date(getTimeSeconds()*1000);
     }
 
-    void setTime(long time) {
+    public void setTime(long time) {
         unCacheHeader();
         this.time = time;
         this.hash = null;
@@ -867,7 +882,8 @@ public class Block extends Message {
         return difficultyTarget;
     }
 
-    void setDifficultyTarget(long compactForm) {
+    /** Sets the difficulty target in compact form. */
+    public void setDifficultyTarget(long compactForm) {
         unCacheHeader();
         this.difficultyTarget = compactForm;
         this.hash = null;
@@ -882,15 +898,17 @@ public class Block extends Message {
         return nonce;
     }
 
-    void setNonce(long nonce) {
+    /** Sets the nonce and clears any cached data. */
+    public void setNonce(long nonce) {
         unCacheHeader();
         this.nonce = nonce;
         this.hash = null;
     }
 
+    /** Returns an immutable list of transactions held in this block. */
     public List<Transaction> getTransactions() {
        maybeParseTransactions();
-       return Collections.unmodifiableList(transactions);
+       return ImmutableList.copyOf(transactions);
     }
 
     // ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -909,8 +927,9 @@ public class Block extends Message {
         //
         // Here we will do things a bit differently so a new address isn't needed every time. We'll put a simple
         // counter in the scriptSig so every transaction has a different hash.
-        coinbase.addInput(new TransactionInput(params, coinbase, new byte[]{(byte) txCounter++, (byte) 1}));
-        coinbase.addOutput(new TransactionOutput(params, coinbase, value, Script.createOutputScript(pubKeyTo)));
+        coinbase.addInput(new TransactionInput(params, coinbase, new byte[]{(byte) txCounter, (byte) (txCounter++ >> 8)}));
+        coinbase.addOutput(new TransactionOutput(params, coinbase, value,
+                ScriptBuilder.createOutputScript(new ECKey(null, pubKeyTo)).getProgram()));
         transactions.add(coinbase);
         coinbase.setParent(this);
         coinbase.length = coinbase.bitcoinSerialize().length;
@@ -946,8 +965,8 @@ public class Block extends Message {
                 // Importantly the outpoint hash cannot be zero as that's how we detect a coinbase transaction in isolation
                 // but it must be unique to avoid 'different' transactions looking the same.
                 byte[] counter = new byte[32];
-                counter[0] = (byte) txCounter++;
-                counter[1] = 1;
+                counter[0] = (byte) txCounter;
+                counter[1] = (byte) (txCounter++ >> 8);
                 input.getOutpoint().setHash(new Sha256Hash(counter));
             } else {
                 input = new TransactionInput(params, t, Script.createInputScript(EMPTY_BYTES, EMPTY_BYTES), prevOut);

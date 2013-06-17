@@ -16,6 +16,9 @@
 
 package com.google.bitcoin.core;
 
+import com.google.bitcoin.params.TestNet2Params;
+import com.google.bitcoin.params.UnitTestParams;
+import com.google.bitcoin.script.ScriptOpCodes;
 import org.junit.Test;
 import org.spongycastle.util.encoders.Hex;
 
@@ -29,7 +32,7 @@ import java.util.Arrays;
 import static org.junit.Assert.*;
 
 public class BlockTest {
-    static final NetworkParameters params = NetworkParameters.testNet2();
+    static final NetworkParameters params = TestNet2Params.get();
 
     public static final byte[] blockBytes;
 
@@ -41,7 +44,7 @@ public class BlockTest {
 
     @Test
     public void testWork() throws Exception {
-        BigInteger work = params.genesisBlock.getWork();
+        BigInteger work = params.getGenesisBlock().getWork();
         // This number is printed by the official client at startup as the calculated value of chainWork on testnet:
         //
         // SetBestChain: new best=00000007199508e34a9f  height=0  work=536879104
@@ -65,7 +68,7 @@ public class BlockTest {
     @Test
     public void testProofOfWork() throws Exception {
         // This params accepts any difficulty target.
-        NetworkParameters params = NetworkParameters.unitTests();
+        NetworkParameters params = UnitTestParams.get();
         Block block = new Block(params, blockBytes);
         block.setNonce(12346);
         try {
@@ -152,17 +155,17 @@ public class BlockTest {
     
     @Test
     public void testUpdateLength() {
-        NetworkParameters params = NetworkParameters.unitTests();
-        Block block = params.genesisBlock.createNextBlockWithCoinbase(new ECKey().getPubKey());
+        NetworkParameters params = UnitTestParams.get();
+        Block block = params.getGenesisBlock().createNextBlockWithCoinbase(new ECKey().getPubKey());
         assertEquals(block.bitcoinSerialize().length, block.length);
         final int origBlockLen = block.length;
         Transaction tx = new Transaction(params);
         // this is broken until the transaction has > 1 input + output (which is required anyway...)
         //assertTrue(tx.length == tx.bitcoinSerialize().length && tx.length == 8);
         byte[] outputScript = new byte[10];
-        Arrays.fill(outputScript, (byte)Script.OP_FALSE);
+        Arrays.fill(outputScript, (byte) ScriptOpCodes.OP_FALSE);
         tx.addOutput(new TransactionOutput(params, null, BigInteger.valueOf(1), outputScript));
-        tx.addInput(new TransactionInput(params, null, new byte[] {(byte)Script.OP_FALSE},
+        tx.addInput(new TransactionInput(params, null, new byte[] {(byte) ScriptOpCodes.OP_FALSE},
                 new TransactionOutPoint(params, 0, Sha256Hash.create(new byte[] {1}))));
         int origTxLength = 8 + 2 + 8 + 1 + 10 + 40 + 1 + 1;
         assertEquals(tx.bitcoinSerialize().length, tx.length);
@@ -170,14 +173,14 @@ public class BlockTest {
         block.addTransaction(tx);
         assertEquals(block.bitcoinSerialize().length, block.length);
         assertEquals(origBlockLen + tx.length, block.length);
-        block.getTransactions().get(1).getInputs().get(0).setScriptBytes(new byte[] {(byte)Script.OP_FALSE, (byte)Script.OP_FALSE});
+        block.getTransactions().get(1).getInputs().get(0).setScriptBytes(new byte[] {(byte) ScriptOpCodes.OP_FALSE, (byte) ScriptOpCodes.OP_FALSE});
         assertEquals(block.length, origBlockLen + tx.length);
         assertEquals(tx.length, origTxLength + 1);
         block.getTransactions().get(1).getInputs().get(0).setScriptBytes(new byte[] {});
         assertEquals(block.length, block.bitcoinSerialize().length);
         assertEquals(block.length, origBlockLen + tx.length);
         assertEquals(tx.length, origTxLength - 1);
-        block.getTransactions().get(1).addInput(new TransactionInput(params, null, new byte[] {(byte)Script.OP_FALSE},
+        block.getTransactions().get(1).addInput(new TransactionInput(params, null, new byte[] {(byte) ScriptOpCodes.OP_FALSE},
                 new TransactionOutPoint(params, 0, Sha256Hash.create(new byte[] {1}))));
         assertEquals(block.length, origBlockLen + tx.length);
         assertEquals(tx.length, origTxLength + 41); // - 1 + 40 + 1 + 1

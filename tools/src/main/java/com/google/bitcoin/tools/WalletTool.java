@@ -20,6 +20,8 @@ import com.google.bitcoin.core.*;
 import com.google.bitcoin.crypto.KeyCrypterException;
 import com.google.bitcoin.discovery.DnsDiscovery;
 import com.google.bitcoin.discovery.PeerDiscovery;
+import com.google.bitcoin.params.MainNetParams;
+import com.google.bitcoin.params.TestNet3Params;
 import com.google.bitcoin.store.*;
 import com.google.bitcoin.utils.BriefLogFormatter;
 import joptsimple.OptionParser;
@@ -272,13 +274,13 @@ public class WalletTool {
             logger.setLevel(Level.SEVERE);
         }
         switch (netFlag.value(options)) {
-            case PROD: 
-                params = NetworkParameters.prodNet();
+            case PROD:
+                params = MainNetParams.get();
                 chainFileName = new File("prodnet.chain");
 
                 break;
-            case TEST: 
-                params = NetworkParameters.testNet();
+            case TEST:
+                params = TestNet3Params.get();
                 chainFileName = new File("testnet.chain");
                 break;
             default:
@@ -426,11 +428,7 @@ public class WalletTool {
             Wallet.SendRequest req = Wallet.SendRequest.forTx(t);
             req.fee = fee;
             if (allowUnconfirmed) {
-                wallet.setCoinSelector(new Wallet.DefaultCoinSelector() {
-                    @Override protected boolean shouldSelect(Transaction tx) {
-                        return true;  // Accept any transaction that's spendable.
-                    }
-                });
+                wallet.allowSpendingUnconfirmedTransactions();
             }
             if (password != null) {
                 if (!wallet.checkPassword(password)) {
@@ -439,7 +437,7 @@ public class WalletTool {
                 }
                 req.aesKey = wallet.getKeyCrypter().deriveKey(password);
             }
-            if (!wallet.completeTx(req)) {
+            if (wallet.completeTx(req, false) == null) {
                 System.err.println("Insufficient funds: have " + Utils.bitcoinValueToFriendlyString(wallet.getBalance()));
                 return;
             }
@@ -566,7 +564,7 @@ public class WalletTool {
     private static void setup() throws BlockStoreException {
         if (store != null) return;  // Already done.
         // Will create a fresh chain if one doesn't exist or there is an issue with this one.
-        if (!chainFileName.exists() && wallet.getTransactions(true, true).size() > 0) {
+        if (!chainFileName.exists() && wallet.getTransactions(true).size() > 0) {
             // No chain, so reset the wallet as we will be downloading from scratch.
             System.out.println("Chain file is missing so clearing transactions from the wallet.");
             reset();
@@ -589,7 +587,7 @@ public class WalletTool {
             String[] peerAddrs = peersFlag.split(",");
             for (String peer : peerAddrs) {
                 try {
-                    peers.addAddress(new PeerAddress(InetAddress.getByName(peer), params.port));
+                    peers.addAddress(new PeerAddress(InetAddress.getByName(peer), params.getPort()));
                 } catch (UnknownHostException e) {
                     System.err.println("Could not understand peer domain name/IP address: " + peer + ": " + e.getMessage());
                     System.exit(1);
@@ -603,7 +601,7 @@ public class WalletTool {
     private static void syncChain() {
         try {
             setup();
-            int startTransactions = wallet.getTransactions(true, true).size();
+            int startTransactions = wallet.getTransactions(true).size();
             DownloadListener listener = new DownloadListener();
             peers.startAndWait();
             peers.startBlockChainDownload(listener);
@@ -613,7 +611,7 @@ public class WalletTool {
                 System.err.println("Chain download interrupted, quitting ...");
                 System.exit(1);
             }
-            int endTransactions = wallet.getTransactions(true, true).size();
+            int endTransactions = wallet.getTransactions(true).size();
             if (endTransactions > startTransactions) {
                 System.out.println("Synced " + (endTransactions - startTransactions) + " transactions.");
             }
@@ -730,7 +728,7 @@ public class WalletTool {
         ECKey key = null;
         if (pubkey != null) {
             key = wallet.findKeyFromPubKey(Hex.decode(pubkey));
-        } else if (addr != null) {
+        } else {
             try {
                 Address address = new Address(wallet.getParams(), addr);
                 key = wallet.findKeyFromPubHash(address.getHash160());
@@ -743,7 +741,7 @@ public class WalletTool {
             System.err.println("Wallet does not seem to contain that key.");
             return;
         }
-        wallet.keychain.remove(key);
+        wallet.removeKey(key);
     }    
     
     private static void dumpWallet() throws BlockStoreException {

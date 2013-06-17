@@ -15,10 +15,15 @@
  * limitations under the License.
  */
 
-package com.google.bitcoin.core;
+package com.google.bitcoin.script;
 
+import com.google.bitcoin.core.*;
+import com.google.common.collect.Lists;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.spongycastle.crypto.digests.RIPEMD160Digest;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -27,26 +32,12 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.*;
 
+import static com.google.bitcoin.script.ScriptOpCodes.*;
 import static com.google.bitcoin.core.Utils.bytesToHexString;
+import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkState;
 
-/**
- * A chunk in a script
- */
-class ScriptChunk {
-    public boolean isOpCode;
-    public byte[] data;
-    public int startLocationInProgram;
-    public ScriptChunk(boolean isOpCode, byte[] data, int startLocationInProgram) {
-        this.isOpCode = isOpCode;
-        this.data = data;
-        this.startLocationInProgram = startLocationInProgram;
-    }
-    public boolean equalsOpCode(int opCode) {
-        return isOpCode &&
-                data.length == 1 &&
-                (0xFF & data[0]) == opCode;
-    }
-}
+// TODO: Make this class a superclass with derived classes giving accessor methods for the various common templates.
 
 /**
  * <p>Programs embedded inside transactions that control redemption of payments.</p>
@@ -60,174 +51,42 @@ class ScriptChunk {
  * static methods for building scripts.</p>
  */
 public class Script {
-    // Some constants used for decoding the scripts, copied from the reference client
-    // push value
-    public static final int OP_0 = 0x00;
-    public static final int OP_FALSE = OP_0;
-    public static final int OP_PUSHDATA1 = 0x4c;
-    public static final int OP_PUSHDATA2 = 0x4d;
-    public static final int OP_PUSHDATA4 = 0x4e;
-    public static final int OP_1NEGATE = 0x4f;
-    public static final int OP_RESERVED = 0x50;
-    public static final int OP_1 = 0x51;
-    public static final int OP_TRUE=OP_1;
-    public static final int OP_2 = 0x52;
-    public static final int OP_3 = 0x53;
-    public static final int OP_4 = 0x54;
-    public static final int OP_5 = 0x55;
-    public static final int OP_6 = 0x56;
-    public static final int OP_7 = 0x57;
-    public static final int OP_8 = 0x58;
-    public static final int OP_9 = 0x59;
-    public static final int OP_10 = 0x5a;
-    public static final int OP_11 = 0x5b;
-    public static final int OP_12 = 0x5c;
-    public static final int OP_13 = 0x5d;
-    public static final int OP_14 = 0x5e;
-    public static final int OP_15 = 0x5f;
-    public static final int OP_16 = 0x60;
+    private static final Logger log = LoggerFactory.getLogger(Script.class);
+    public static final long MAX_SCRIPT_ELEMENT_SIZE = 520;  // bytes
 
-    // control
-    public static final int OP_NOP = 0x61;
-    public static final int OP_VER = 0x62;
-    public static final int OP_IF = 0x63;
-    public static final int OP_NOTIF = 0x64;
-    public static final int OP_VERIF = 0x65;
-    public static final int OP_VERNOTIF = 0x66;
-    public static final int OP_ELSE = 0x67;
-    public static final int OP_ENDIF = 0x68;
-    public static final int OP_VERIFY = 0x69;
-    public static final int OP_RETURN = 0x6a;
+    // The program is a set of chunks where each element is either [opcode] or [data, data, data ...]
+    protected List<ScriptChunk> chunks;
+    // Unfortunately, scripts are not ever re-serialized or canonicalized when used in signature hashing. Thus we
+    // must preserve the exact bytes that we read off the wire, along with the parsed form.
+    protected byte[] program;
 
-    // stack ops
-    public static final int OP_TOALTSTACK = 0x6b;
-    public static final int OP_FROMALTSTACK = 0x6c;
-    public static final int OP_2DROP = 0x6d;
-    public static final int OP_2DUP = 0x6e;
-    public static final int OP_3DUP = 0x6f;
-    public static final int OP_2OVER = 0x70;
-    public static final int OP_2ROT = 0x71;
-    public static final int OP_2SWAP = 0x72;
-    public static final int OP_IFDUP = 0x73;
-    public static final int OP_DEPTH = 0x74;
-    public static final int OP_DROP = 0x75;
-    public static final int OP_DUP = 0x76;
-    public static final int OP_NIP = 0x77;
-    public static final int OP_OVER = 0x78;
-    public static final int OP_PICK = 0x79;
-    public static final int OP_ROLL = 0x7a;
-    public static final int OP_ROT = 0x7b;
-    public static final int OP_SWAP = 0x7c;
-    public static final int OP_TUCK = 0x7d;
-
-    // splice ops
-    public static final int OP_CAT = 0x7e;
-    public static final int OP_SUBSTR = 0x7f;
-    public static final int OP_LEFT = 0x80;
-    public static final int OP_RIGHT = 0x81;
-    public static final int OP_SIZE = 0x82;
-
-    // bit logic
-    public static final int OP_INVERT = 0x83;
-    public static final int OP_AND = 0x84;
-    public static final int OP_OR = 0x85;
-    public static final int OP_XOR = 0x86;
-    public static final int OP_EQUAL = 0x87;
-    public static final int OP_EQUALVERIFY = 0x88;
-    public static final int OP_RESERVED1 = 0x89;
-    public static final int OP_RESERVED2 = 0x8a;
-
-    // numeric
-    public static final int OP_1ADD = 0x8b;
-    public static final int OP_1SUB = 0x8c;
-    public static final int OP_2MUL = 0x8d;
-    public static final int OP_2DIV = 0x8e;
-    public static final int OP_NEGATE = 0x8f;
-    public static final int OP_ABS = 0x90;
-    public static final int OP_NOT = 0x91;
-    public static final int OP_0NOTEQUAL = 0x92;
-
-    public static final int OP_ADD = 0x93;
-    public static final int OP_SUB = 0x94;
-    public static final int OP_MUL = 0x95;
-    public static final int OP_DIV = 0x96;
-    public static final int OP_MOD = 0x97;
-    public static final int OP_LSHIFT = 0x98;
-    public static final int OP_RSHIFT = 0x99;
-
-    public static final int OP_BOOLAND = 0x9a;
-    public static final int OP_BOOLOR = 0x9b;
-    public static final int OP_NUMEQUAL = 0x9c;
-    public static final int OP_NUMEQUALVERIFY = 0x9d;
-    public static final int OP_NUMNOTEQUAL = 0x9e;
-    public static final int OP_LESSTHAN = 0x9f;
-    public static final int OP_GREATERTHAN = 0xa0;
-    public static final int OP_LESSTHANOREQUAL = 0xa1;
-    public static final int OP_GREATERTHANOREQUAL = 0xa2;
-    public static final int OP_MIN = 0xa3;
-    public static final int OP_MAX = 0xa4;
-
-    public static final int OP_WITHIN = 0xa5;
-
-    // crypto
-    public static final int OP_RIPEMD160 = 0xa6;
-    public static final int OP_SHA1 = 0xa7;
-    public static final int OP_SHA256 = 0xa8;
-    public static final int OP_HASH160 = 0xa9;
-    public static final int OP_HASH256 = 0xaa;
-    public static final int OP_CODESEPARATOR = 0xab;
-    public static final int OP_CHECKSIG = 0xac;
-    public static final int OP_CHECKSIGVERIFY = 0xad;
-    public static final int OP_CHECKMULTISIG = 0xae;
-    public static final int OP_CHECKMULTISIGVERIFY = 0xaf;
-
-    // expansion
-    public static final int OP_NOP1 = 0xb0;
-    public static final int OP_NOP2 = 0xb1;
-    public static final int OP_NOP3 = 0xb2;
-    public static final int OP_NOP4 = 0xb3;
-    public static final int OP_NOP5 = 0xb4;
-    public static final int OP_NOP6 = 0xb5;
-    public static final int OP_NOP7 = 0xb6;
-    public static final int OP_NOP8 = 0xb7;
-    public static final int OP_NOP9 = 0xb8;
-    public static final int OP_NOP10 = 0xb9;
-
-    public static final int OP_INVALIDOPCODE = 0xff;
-
-    byte[] program;
-    private int cursor;
-
-    // The program is a set of byte[]s where each element is either [opcode] or [data, data, data ...]
-    List<ScriptChunk> chunks;
-    private final NetworkParameters params;
-    
-    // Only for internal use
+    /** Creates an empty script that serializes to nothing. */
     private Script() {
-        params = null;
+        chunks = Lists.newArrayList();
+    }
+
+    // Used from ScriptBuilder.
+    Script(List<ScriptChunk> chunks) {
+        this.chunks = Collections.unmodifiableList(new ArrayList<ScriptChunk>(chunks));
     }
 
     /**
-     * Construct a Script using the given network parameters and a range of the programBytes array.
-     *
-     * @param params       Network parameters.
+     * Construct a Script that copies and wraps the programBytes array. The array is parsed and checked for syntactic
+     * validity.
      * @param programBytes Array of program bytes from a transaction.
-     * @param offset       How many bytes into programBytes to start reading from.
-     * @param length       How many bytes to read.
-     * @throws ScriptException
      */
-    public Script(NetworkParameters params, byte[] programBytes, int offset, int length) throws ScriptException {
-        this.params = params;
-        parse(programBytes, offset, length);
+    public Script(byte[] programBytes) throws ScriptException {
+        program = programBytes;
+        parse(programBytes);
     }
 
     /**
      * Returns the program opcodes as a string, for example "[1234] DUP HAHS160"
      */
     public String toString() {
-        StringBuffer buf = new StringBuffer();
+        StringBuilder buf = new StringBuilder();
         for (ScriptChunk chunk : chunks) {
-            if (chunk.isOpCode) {
+            if (chunk.isOpCode()) {
                 buf.append(getOpCodeName(chunk.data[0]));
                 buf.append(" ");
             } else {
@@ -239,305 +98,71 @@ public class Script {
         }
         return buf.toString();
     }
-    
-    /**
-     * Converts the given OpCode into a string (eg "0", "PUSHDATA", or "NON_OP(10)")
-     */
-    public static String getOpCodeName(byte opCode) {
-        int opcode = opCode & 0xff;
-        switch (opcode) {
-        case OP_0:
-            return "0";
-        case OP_PUSHDATA1:
-            return "PUSHDATA1";
-        case OP_PUSHDATA2:
-            return "PUSHDATA1";
-        case OP_PUSHDATA4:
-            return "PUSHDATA4";
-        case OP_1NEGATE:
-            return "1NEGATE";
-        case OP_RESERVED:
-            return "RESERVED";
-        case OP_1:
-            return "1";
-        case OP_2:
-            return "2";
-        case OP_3:
-            return "3";
-        case OP_4:
-            return "4";
-        case OP_5:
-            return "5";
-        case OP_6:
-            return "6";
-        case OP_7:
-            return "7";
-        case OP_8:
-            return "8";
-        case OP_9:
-            return "9";
-        case OP_10:
-            return "10";
-        case OP_11:
-            return "11";
-        case OP_12:
-            return "12";
-        case OP_13:
-            return "13";
-        case OP_14:
-            return "14";
-        case OP_15:
-            return "15";
-        case OP_16:
-            return "16";
-        case OP_NOP:
-            return "NOP";
-        case OP_VER:
-            return "VER";
-        case OP_IF:
-            return "IF";
-        case OP_NOTIF:
-            return "NOTIF";
-        case OP_VERIF:
-            return "VERIF";
-        case OP_VERNOTIF:
-            return "VERNOTIF";
-        case OP_ELSE:
-            return "ELSE";
-        case OP_ENDIF:
-            return "ENDIF";
-        case OP_VERIFY:
-            return "VERIFY";
-        case OP_RETURN:
-            return "RETURN";
-        case OP_TOALTSTACK:
-            return "TOALTSTACK";
-        case OP_FROMALTSTACK:
-            return "FROMALTSTACK";
-        case OP_2DROP:
-            return "2DROP";
-        case OP_2DUP:
-            return "2DUP";
-        case OP_3DUP:
-            return "3DUP";
-        case OP_2OVER:
-            return "2OVER";
-        case OP_2ROT:
-            return "2ROT";
-        case OP_2SWAP:
-            return "2SWAP";
-        case OP_IFDUP:
-            return "IFDUP";
-        case OP_DEPTH:
-            return "DEPTH";
-        case OP_DROP:
-            return "DROP";
-        case OP_DUP:
-            return "DUP";
-        case OP_NIP:
-            return "NIP";
-        case OP_OVER:
-            return "OVER";
-        case OP_PICK:
-            return "PICK";
-        case OP_ROLL:
-            return "ROLL";
-        case OP_ROT:
-            return "ROT";
-        case OP_SWAP:
-            return "SWAP";
-        case OP_TUCK:
-            return "TUCK";
-        case OP_CAT:
-            return "CAT";
-        case OP_SUBSTR:
-            return "SUBSTR";
-        case OP_LEFT:
-            return "LEFT";
-        case OP_RIGHT:
-            return "RIGHT";
-        case OP_SIZE:
-            return "SIZE";
-        case OP_INVERT:
-            return "INVERT";
-        case OP_AND:
-            return "AND";
-        case OP_OR:
-            return "OR";
-        case OP_XOR:
-            return "XOR";
-        case OP_EQUAL:
-            return "EQUAL";
-        case OP_EQUALVERIFY:
-            return "EQUALVERIFY";
-        case OP_RESERVED1:
-            return "RESERVED1";
-        case OP_RESERVED2:
-            return "RESERVED2";
-        case OP_1ADD:
-            return "1ADD";
-        case OP_1SUB:
-            return "1SUB";
-        case OP_2MUL:
-            return "2MUL";
-        case OP_2DIV:
-            return "2DIV";
-        case OP_NEGATE:
-            return "NEGATE";
-        case OP_ABS:
-            return "ABS";
-        case OP_NOT:
-            return "NOT";
-        case OP_0NOTEQUAL:
-            return "0NOTEQUAL";
-        case OP_ADD:
-            return "ADD";
-        case OP_SUB:
-            return "SUB";
-        case OP_MUL:
-            return "MUL";
-        case OP_DIV:
-            return "DIV";
-        case OP_MOD:
-            return "MOD";
-        case OP_LSHIFT:
-            return "LSHIFT";
-        case OP_RSHIFT:
-            return "RSHIFT";
-        case OP_BOOLAND:
-            return "BOOLAND";
-        case OP_BOOLOR:
-            return "BOOLOR";
-        case OP_NUMEQUAL:
-            return "NUMEQUAL";
-        case OP_NUMEQUALVERIFY:
-            return "NUMEQUALVERIFY";
-        case OP_NUMNOTEQUAL:
-            return "NUMNOTEQUAL";
-        case OP_LESSTHAN:
-            return "LESSTHAN";
-        case OP_GREATERTHAN:
-            return "GREATERTHAN";
-        case OP_LESSTHANOREQUAL:
-            return "LESSTHANOREQUAL";
-        case OP_GREATERTHANOREQUAL:
-            return "GREATERTHANOREQUAL";
-        case OP_MIN:
-            return "MIN";
-        case OP_MAX:
-            return "MAX";
-        case OP_WITHIN:
-            return "WITHIN";
-        case OP_RIPEMD160:
-            return "RIPEMD160";
-        case OP_SHA1:
-            return "SHA1";
-        case OP_SHA256:
-            return "SHA256";
-        case OP_HASH160:
-            return "HASH160";
-        case OP_HASH256:
-            return "HASH256";
-        case OP_CODESEPARATOR:
-            return "CODESEPARATOR";
-        case OP_CHECKSIG:
-            return "CHECKSIG";
-        case OP_CHECKSIGVERIFY:
-            return "CHECKSIGVERIFY";
-        case OP_CHECKMULTISIG:
-            return "CHECKMULTISIG";
-        case OP_CHECKMULTISIGVERIFY:
-            return "CHECKMULTISIGVERIFY";
-        case OP_NOP1:
-            return "NOP1";
-        case OP_NOP2:
-            return "NOP2";
-        case OP_NOP3:
-            return "NOP3";
-        case OP_NOP4:
-            return "NOP4";
-        case OP_NOP5:
-            return "NOP5";
-        case OP_NOP6:
-            return "NOP6";
-        case OP_NOP7:
-            return "NOP7";
-        case OP_NOP8:
-            return "NOP8";
-        case OP_NOP9:
-            return "NOP9";
-        case OP_NOP10:
-            return "NOP10";
-        default:
-            return "NON_OP(" + opcode + ")";
+
+    /** Returns the serialized program as a newly created byte array. */
+    public byte[] getProgram() {
+        try {
+            // Don't round-trip as Satoshi's code doesn't and it would introduce a mismatch.
+            if (program != null)
+                return Arrays.copyOf(program, program.length);
+            ByteArrayOutputStream bos = new ByteArrayOutputStream();
+            for (ScriptChunk chunk : chunks) {
+                chunk.write(bos);
+            }
+            return bos.toByteArray();
+        } catch (IOException e) {
+            throw new RuntimeException(e);  // Cannot happen.
         }
     }
 
-
-    private byte[] getData(int len) throws ScriptException {
-        if (len > program.length - cursor)
-            throw new ScriptException("Failed read of " + len + " bytes");
-        try {
-            byte[] buf = new byte[len];
-            System.arraycopy(program, cursor, buf, 0, len);
-            cursor += len;
-            return buf;
-        } catch (ArrayIndexOutOfBoundsException e) {
-            // We want running out of data in the array to be treated as a handleable script parsing exception,
-            // not something that abnormally terminates the app.
-            throw new ScriptException("Failed read of " + len + " bytes", e);
-        } catch (NegativeArraySizeException e) {
-            // We want running out of data in the array to be treated as a handleable script parsing exception,
-            // not something that abnormally terminates the app.
-            throw new ScriptException("Failed read of " + len + " bytes", e);
-        }
-    }
-
-    private int readByte() throws ScriptException {
-        try {
-            return 0xFF & program[cursor++];
-        } catch (ArrayIndexOutOfBoundsException e) {
-            throw new ScriptException("Attempted to read outside of script boundaries");
-        }
+    /** Returns an immutable list of the scripts parsed form. */
+    public List<ScriptChunk> getChunks() {
+        return Collections.unmodifiableList(chunks);
     }
 
     /**
-     * To run a script, first we parse it which breaks it up into chunks representing pushes of
-     * data or logical opcodes. Then we can run the parsed chunks.
-     * <p/>
-     * The reason for this split, instead of just interpreting directly, is to make it easier
+     * <p>To run a script, first we parse it which breaks it up into chunks representing pushes of data or logical
+     * opcodes. Then we can run the parsed chunks.</p>
+     *
+     * <p>The reason for this split, instead of just interpreting directly, is to make it easier
      * to reach into a programs structure and pull out bits of data without having to run it.
      * This is necessary to render the to/from addresses of transactions in a user interface.
-     * The official client does something similar.
+     * The official client does something similar.</p>
      */
-    private void parse(byte[] programBytes, int offset, int length) throws ScriptException {
-        // TODO: this is inefficient
-        program = new byte[length];
-        System.arraycopy(programBytes, offset, program, 0, length);
+    private void parse(byte[] program) throws ScriptException {
+        chunks = new ArrayList<ScriptChunk>(10);  // Arbitrary choice.
+        ByteArrayInputStream bis = new ByteArrayInputStream(program);
+        int initialSize = bis.available();
+        while (bis.available() > 0) {
+            int startLocationInProgram = initialSize - bis.available();
+            int opcode = bis.read();
 
-        offset = 0;
-        chunks = new ArrayList<ScriptChunk>(10);  // Arbitrary choice of initial size.
-        cursor = offset;
-        while (cursor < offset + length) {
-            int startLocationInProgram = cursor - offset;
-            int opcode = readByte();
+            long dataToRead = -1;
             if (opcode >= 0 && opcode < OP_PUSHDATA1) {
                 // Read some bytes of data, where how many is the opcode value itself.
-                chunks.add(new ScriptChunk(false, getData(opcode), startLocationInProgram));  // opcode == len here.
+                dataToRead = opcode;
             } else if (opcode == OP_PUSHDATA1) {
-                int len = readByte();
-                chunks.add(new ScriptChunk(false, getData(len), startLocationInProgram));
+                if (bis.available() < 1) throw new ScriptException("Unexpected end of script");
+                dataToRead = bis.read();
             } else if (opcode == OP_PUSHDATA2) {
                 // Read a short, then read that many bytes of data.
-                int len = readByte() | (readByte() << 8);
-                chunks.add(new ScriptChunk(false, getData(len), startLocationInProgram));
+                if (bis.available() < 2) throw new ScriptException("Unexpected end of script");
+                dataToRead = bis.read() | (bis.read() << 8);
             } else if (opcode == OP_PUSHDATA4) {
                 // Read a uint32, then read that many bytes of data.
                 // Though this is allowed, because its value cannot be > 520, it should never actually be used
-                long len = readByte() | (readByte() << 8) | (readByte() << 16) | (readByte() << 24);
-                chunks.add(new ScriptChunk(false, getData((int)len), startLocationInProgram));
-            } else {
+                if (bis.available() < 4) throw new ScriptException("Unexpected end of script");
+                dataToRead = ((long)bis.read()) | (((long)bis.read()) << 8) | (((long)bis.read()) << 16) | (((long)bis.read()) << 24);
+            }
+
+            if (dataToRead == -1) {
                 chunks.add(new ScriptChunk(true, new byte[]{(byte) opcode}, startLocationInProgram));
+            } else {
+                if (dataToRead > bis.available())
+                    throw new ScriptException("Push of data element that is larger than remaining data");
+                byte[] data = new byte[(int)dataToRead];
+                checkState(dataToRead == 0 || bis.read(data, 0, (int)dataToRead) == dataToRead);
+                chunks.add(new ScriptChunk(false, data, startLocationInProgram));
             }
         }
     }
@@ -549,10 +174,8 @@ public class Script {
      * useful more exotic types of transaction, but today most payments are to addresses.
      */
     public boolean isSentToRawPubKey() {
-        if (chunks.size() != 2)
-            return false;
-        return chunks.get(1).equalsOpCode(OP_CHECKSIG) &&
-                !chunks.get(0).isOpCode && chunks.get(0).data.length > 1;
+        return chunks.size() == 2 && chunks.get(1).equalsOpCode(OP_CHECKSIG) &&
+               !chunks.get(0).isOpCode() && chunks.get(0).data.length > 1;
     }
 
     /**
@@ -562,8 +185,8 @@ public class Script {
      * way to make payments due to the short and recognizable base58 form addresses come in.
      */
     public boolean isSentToAddress() {
-        if (chunks.size() != 5) return false;
-        return chunks.get(0).equalsOpCode(OP_DUP) &&
+        return chunks.size() == 5 &&
+               chunks.get(0).equalsOpCode(OP_DUP) &&
                chunks.get(1).equalsOpCode(OP_HASH160) &&
                chunks.get(2).data.length == Address.LENGTH &&
                chunks.get(3).equalsOpCode(OP_EQUALVERIFY) &&
@@ -607,9 +230,12 @@ public class Script {
     }
 
     /**
-     * Convenience wrapper around getPubKey. Only works for scriptSigs.
+     * For 2-element [input] scripts assumes that the paid-to-address can be derived from the public key.
+     * The concept of a "from address" isn't well defined in Bitcoin and you should not assume the sender of a
+     * transaction can actually receive coins on it. This method may be removed in future.
      */
-    public Address getFromAddress() throws ScriptException {
+    @Deprecated
+    public Address getFromAddress(NetworkParameters params) throws ScriptException {
         return new Address(params, Utils.sha256hash160(getPubKey()));
     }
 
@@ -618,7 +244,7 @@ public class Script {
      *
      * @throws ScriptException
      */
-    public Address getToAddress() throws ScriptException {
+    public Address getToAddress(NetworkParameters params) throws ScriptException {
         return new Address(params, getPubKeyHash());
     }
 
@@ -628,7 +254,7 @@ public class Script {
      * Writes out the given byte buffer to the output stream with the correct opcode prefix
      * To write an integer call writeBytes(out, Utils.reverseBytes(Utils.encodeMPI(val, false)));
      */
-    static void writeBytes(OutputStream os, byte[] buf) throws IOException {
+    public static void writeBytes(OutputStream os, byte[] buf) throws IOException {
         if (buf.length < OP_PUSHDATA1) {
             os.write(buf.length);
             os.write(buf);
@@ -646,42 +272,26 @@ public class Script {
         }
     }
 
-    public static byte[] createOutputScript(Address to) {
+    /** Creates a program that requires at least N of the given keys to sign, using OP_CHECKMULTISIG. */
+    public static byte[] createMultiSigOutputScript(int threshold, List<ECKey> pubkeys) {
+        checkArgument(threshold > 0);
+        checkArgument(threshold <= pubkeys.size());
+        checkArgument(pubkeys.size() <= 16);  // That's the max we can represent with a single opcode.
+        if (pubkeys.size() > 3) {
+            log.warn("Creating a multi-signature output that is non-standard: {} pubkeys, should be <= 3", pubkeys.size());
+        }
         try {
-            // TODO: Do this by creating a Script *first* then having the script reassemble itself into bytes.
-            ByteArrayOutputStream bits = new UnsafeByteArrayOutputStream(24);
-            bits.write(OP_DUP);
-            bits.write(OP_HASH160);
-            writeBytes(bits, to.getHash160());
-            bits.write(OP_EQUALVERIFY);
-            bits.write(OP_CHECKSIG);
+            ByteArrayOutputStream bits = new ByteArrayOutputStream();
+            bits.write(encodeToOpN(threshold));
+            for (ECKey key : pubkeys) {
+                writeBytes(bits, key.getPubKey());
+            }
+            bits.write(encodeToOpN(pubkeys.size()));
+            bits.write(OP_CHECKMULTISIG);
             return bits.toByteArray();
         } catch (IOException e) {
             throw new RuntimeException(e);  // Cannot happen.
         }
-    }
-
-    /**
-     * Create a script that sends coins directly to the given public key (eg in a coinbase transaction).
-     */
-    public static byte[] createOutputScript(byte[] pubkey) {
-        try {
-            // TODO: Do this by creating a Script *first* then having the script reassemble itself into bytes.
-            ByteArrayOutputStream bits = new UnsafeByteArrayOutputStream(pubkey.length + 1);
-            writeBytes(bits, pubkey);
-            bits.write(OP_CHECKSIG);
-            return bits.toByteArray();
-        } catch (IOException e) {
-            throw new RuntimeException(e);  // Cannot happen.
-        }
-    }
-
-    /**
-     * Creates a script that sends coins directly to the given public key. Same as
-     * {@link Script#createOutputScript(byte[])} but more type safe.
-     */
-    public static byte[] createOutputScript(ECKey pubkey) {
-        return createOutputScript(pubkey.getPubKey());
     }
 
     public static byte[] createInputScript(byte[] signature, byte[] pubkey) {
@@ -713,7 +323,7 @@ public class Script {
         int sigOps = 0;
         int lastOpCode = OP_INVALIDOPCODE;
         for (ScriptChunk chunk : chunks) {
-            if (chunk.isOpCode) {
+            if (chunk.isOpCode()) {
                 int opcode = 0xFF & chunk.data[0];
                 switch (opcode) {
                 case OP_CHECKSIG:
@@ -723,7 +333,7 @@ public class Script {
                 case OP_CHECKMULTISIG:
                 case OP_CHECKMULTISIGVERIFY:
                     if (accurate && lastOpCode >= OP_1 && lastOpCode <= OP_16)
-                        sigOps += getOpNValue(lastOpCode);
+                        sigOps += decodeFromOpN(lastOpCode);
                     else
                         sigOps += 20;
                     break;
@@ -735,16 +345,32 @@ public class Script {
         }
         return sigOps;
     }
-    
+
     /**
-     * Convince method to get the int value of OP_N
+     * Converts an opcode to its int representation
+     * @throws IllegalArgumentException If the opcode is not an OP_N opcode
      */
-    private static int getOpNValue(int opcode) throws ScriptException {
+    public static int decodeFromOpN(byte opcode) throws IllegalArgumentException {
+        return decodeFromOpN((int)opcode);
+    }
+    static int decodeFromOpN(int opcode) {
+        checkArgument(opcode >= -1 && opcode <= OP_16, "decodeFromOpN called on non OP_N opcode");
         if (opcode == OP_0)
             return 0;
-        if (opcode < OP_1 || opcode > OP_16) // This should absolutely never happen
-            throw new ScriptException("getOpNValue called on non OP_N opcode");
-        return opcode + 1 - OP_1;
+        else if (opcode == OP_1NEGATE)
+            return -1;
+        else
+            return opcode + 1 - OP_1;
+    }
+
+    static int encodeToOpN(int value) {
+        checkArgument(value >= -1 && value <= 16, "encodeToOpN called for " + value + " which we cannot encode in an opcode.");
+        if (value == 0)
+            return OP_0;
+        else if (value == -1)
+            return OP_1NEGATE;
+        else
+            return value - 1 + OP_1;
     }
 
     /**
@@ -753,7 +379,7 @@ public class Script {
     public static int getSigOpCount(byte[] program) throws ScriptException {
         Script script = new Script();
         try {
-            script.parse(program, 0, program.length);
+            script.parse(program);
         } catch (ScriptException e) {
             // Ignore errors and count up to the parse-able length
         }
@@ -766,14 +392,14 @@ public class Script {
     public static long getP2SHSigOpCount(byte[] scriptSig) throws ScriptException {
         Script script = new Script();
         try {
-            script.parse(scriptSig, 0, scriptSig.length);
+            script.parse(scriptSig);
         } catch (ScriptException e) {
             // Ignore errors and count up to the parse-able length
         }
         for (int i = script.chunks.size() - 1; i >= 0; i--)
-            if (!script.chunks.get(i).isOpCode) {
+            if (!script.chunks.get(i).isOpCode()) {
                 Script subScript =  new Script();
-                subScript.parse(script.chunks.get(i).data, 0, script.chunks.get(i).data.length);
+                subScript.parse(script.chunks.get(i).data);
                 return getSigOpCount(subScript.chunks, true);
             }
         return 0;
@@ -793,12 +419,42 @@ public class Script {
      * Bitcoin system).</p>
      */
     public boolean isPayToScriptHash() {
+        // We have to check against the serialized form because BIP16 defines a P2SH output using an exact byte
+        // template, not the logical program structure. Thus you can have two programs that look identical when
+        // printed out but one is a P2SH script and the other isn't! :(
+        byte[] program = getProgram();
         return program.length == 23 &&
                (program[0] & 0xff) == OP_HASH160 &&
                (program[1] & 0xff) == 0x14 &&
                (program[22] & 0xff) == OP_EQUAL;
     }
-    
+
+    /**
+     * Returns whether this script matches the format used for multisig outputs: [n] [keys...] [m] CHECKMULTISIG
+     */
+    public boolean isSentToMultiSig() {
+        if (chunks.size() < 4) return false;
+        ScriptChunk chunk = chunks.get(chunks.size() - 1);
+        // Must end in OP_CHECKMULTISIG[VERIFY].
+        if (!chunk.isOpCode()) return false;
+        if (!(chunk.equalsOpCode(OP_CHECKMULTISIG) || chunk.equalsOpCode(OP_CHECKMULTISIGVERIFY))) return false;
+        try {
+            // Second to last chunk must be an OP_N opcode and there should be that many data chunks (keys).
+            ScriptChunk m = chunks.get(chunks.size() - 2);
+            if (!m.isOpCode()) return false;
+            int numKeys = decodeFromOpN(m.data[0]);
+            if (chunks.size() != 3 + numKeys) return false;
+            for (int i = 1; i < chunks.size() - 2; i++) {
+                if (chunks.get(i).isOpCode()) return false;
+            }
+            // First chunk must be an OP_N opcode too.
+            decodeFromOpN(chunks.get(0).data[0]);
+        } catch (IllegalStateException e) {
+            return false;   // Not an OP_N opcode.
+        }
+        return true;
+    }
+
     private static boolean equalsRange(byte[] a, int start, byte[] b) {
         if (start + b.length > a.length)
             return false;
@@ -883,8 +539,8 @@ public class Script {
         for (ScriptChunk chunk : script.chunks) {
             boolean shouldExecute = !ifStack.contains(false);
             
-            if (!chunk.isOpCode) {
-                if (chunk.data.length > 520)
+            if (!chunk.isOpCode()) {
+                if (chunk.data.length > MAX_SCRIPT_ELEMENT_SIZE)
                     throw new ScriptException("Attempted to push a data string larger than 520 bytes");
                 
                 if (!shouldExecute)
@@ -943,7 +599,10 @@ public class Script {
                     continue;
                 
                 switch(opcode) {
-                //case OP_0: dont know why this isnt also here in the reference client
+                case OP_0:
+                    // This is also OP_FALSE (they are both zero).
+                    stack.add(new byte[]{0});
+                    break;
                 case OP_1NEGATE:
                     stack.add(Utils.reverseBytes(Utils.encodeMPI(BigInteger.ONE.negate(), false)));
                     break;
@@ -963,7 +622,7 @@ public class Script {
                 case OP_14:
                 case OP_15:
                 case OP_16:
-                    stack.add(Utils.reverseBytes(Utils.encodeMPI(BigInteger.valueOf(getOpNValue(opcode)), false)));
+                    stack.add(Utils.reverseBytes(Utils.encodeMPI(BigInteger.valueOf(decodeFromOpN(opcode)), false)));
                     break;
                 case OP_NOP:
                     break;
@@ -1343,114 +1002,15 @@ public class Script {
                     stack.add(Utils.doubleDigest(stack.pollLast()));
                     break;
                 case OP_CODESEPARATOR:
-                    lastCodeSepLocation = chunk.startLocationInProgram + 1;
+                    lastCodeSepLocation = chunk.getStartLocationInProgram() + 1;
                     break;
                 case OP_CHECKSIG:
                 case OP_CHECKSIGVERIFY:
-                    if (stack.size() < 2)
-                        throw new ScriptException("Attempted OP_CHECKSIG(VERIFY) on a stack with size < 2");
-                    byte[] CHECKSIGpubKey = stack.pollLast();
-                    byte[] CHECKSIGsig = stack.pollLast();
-                    
-                    byte[] CHECKSIGconnectedScript = Arrays.copyOfRange(script.program, lastCodeSepLocation, script.program.length);
-                    
-                    UnsafeByteArrayOutputStream OPCHECKSIGOutStream = new UnsafeByteArrayOutputStream(CHECKSIGsig.length + 1);
-                    try {
-                        writeBytes(OPCHECKSIGOutStream, CHECKSIGsig);
-                    } catch (IOException e) {
-                        throw new RuntimeException(e); // Cannot happen
-                    }
-                    CHECKSIGconnectedScript = removeAllInstancesOf(CHECKSIGconnectedScript, OPCHECKSIGOutStream.toByteArray());
-                    
-                    // TODO: Use int for indexes everywhere, we can't have that many inputs/outputs
-                    Sha256Hash CHECKSIGhash = txContainingThis.hashTransactionForSignature((int)index, CHECKSIGconnectedScript,
-                            CHECKSIGsig[CHECKSIGsig.length - 1]);
-                                        
-                    boolean CHECKSIGsigValid;
-                    try {
-                        CHECKSIGsigValid = ECKey.verify(CHECKSIGhash.getBytes(), Arrays.copyOf(CHECKSIGsig, CHECKSIGsig.length - 1), CHECKSIGpubKey);
-                    } catch (Exception e1) {
-                        // There is (at least) one exception that could be hit here (EOFException, if the sig is too short)
-                        // Because I can't verify there aren't more, we use a very generic Exception catch
-                        CHECKSIGsigValid = false;
-                    }
-                    
-                    if (opcode == OP_CHECKSIG)
-                        stack.add(CHECKSIGsigValid ? new byte[] {1} : new byte[] {0});
-                    else if (opcode == OP_CHECKSIGVERIFY)
-                        if (!CHECKSIGsigValid)
-                            throw new ScriptException("Script failed OP_CHECKSIGVERIFY");
+                    executeCheckSig(txContainingThis, (int) index, script, stack, lastCodeSepLocation, opcode);
                     break;
                 case OP_CHECKMULTISIG:
                 case OP_CHECKMULTISIGVERIFY:
-                    if (stack.size() < 2)
-                        throw new ScriptException("Attempted OP_CHECKMULTISIG(VERIFY) on a stack with size < 2");
-                    int CHECKMULTISIGpubKeyCount = castToBigInteger(stack.pollLast()).intValue();
-                    if (CHECKMULTISIGpubKeyCount < 0 || CHECKMULTISIGpubKeyCount > 20)
-                        throw new ScriptException("OP_CHECKMULTISIG(VERIFY) with pubkey count out of range");
-                    opCount += CHECKMULTISIGpubKeyCount;
-                    if (opCount > 201)
-                        throw new ScriptException("Total op count > 201 during OP_CHECKMULTISIG(VERIFY)");
-                    if (stack.size() < CHECKMULTISIGpubKeyCount + 1)
-                        throw new ScriptException("Attempted OP_CHECKMULTISIG(VERIFY) on a stack with size < num_of_pubkeys + 2");
-                    
-                    LinkedList<byte[]> CHECKMULTISIGpubkeys = new LinkedList<byte[]>();
-                    for (int i = 0; i < CHECKMULTISIGpubKeyCount; i++)
-                        CHECKMULTISIGpubkeys.add(stack.pollLast());
-                    
-                    int CHECKMULTISIGsigCount = castToBigInteger(stack.pollLast()).intValue();
-                    if (CHECKMULTISIGsigCount < 0 || CHECKMULTISIGsigCount > CHECKMULTISIGpubKeyCount)
-                        throw new ScriptException("OP_CHECKMULTISIG(VERIFY) with sig count out of range");
-                    if (stack.size() < CHECKMULTISIGsigCount + 1)
-                        throw new ScriptException("Attempted OP_CHECKMULTISIG(VERIFY) on a stack with size < num_of_pubkeys + num_of_signatures + 3");
-                    
-                    LinkedList<byte[]> CHECKMULTISIGsigs = new LinkedList<byte[]>();
-                    for (int i = 0; i < CHECKMULTISIGsigCount; i++)
-                        CHECKMULTISIGsigs.add(stack.pollLast());
-                    
-                    byte[] CHECKMULTISIGconnectedScript = Arrays.copyOfRange(script.program, lastCodeSepLocation, script.program.length);
-                    
-                    for (byte[] CHECKMULTISIGsig : CHECKMULTISIGsigs) {
-                        UnsafeByteArrayOutputStream OPCHECKMULTISIGOutStream = new UnsafeByteArrayOutputStream(CHECKMULTISIGsig.length + 1);
-                        try {
-                            writeBytes(OPCHECKMULTISIGOutStream, CHECKMULTISIGsig);
-                        } catch (IOException e) {
-                            throw new RuntimeException(e); // Cannot happen
-                        }
-                        CHECKMULTISIGconnectedScript = removeAllInstancesOf(CHECKMULTISIGconnectedScript, OPCHECKMULTISIGOutStream.toByteArray());
-                    }
-                    
-                    boolean CHECKMULTISIGValid = true;
-                    while (CHECKMULTISIGsigs.size() > 0) {
-                        byte[] CHECKMULTISIGsig = CHECKMULTISIGsigs.getFirst();
-                        byte[] CHECKMULTISIGpubKey = CHECKMULTISIGpubkeys.pollFirst();
-                        
-                        // We could reasonably move this out of the loop,
-                        // but because signature verification is significantly more expensive than hashing, its not a big deal
-                        Sha256Hash CHECKMULTISIGhash = txContainingThis.hashTransactionForSignature((int)index, CHECKMULTISIGconnectedScript,
-                                CHECKMULTISIGsig[CHECKMULTISIGsig.length - 1]);
-                        try {
-                            if (ECKey.verify(CHECKMULTISIGhash.getBytes(), Arrays.copyOf(CHECKMULTISIGsig, CHECKMULTISIGsig.length - 1), CHECKMULTISIGpubKey))
-                                CHECKMULTISIGsigs.pollFirst();
-                        } catch (Exception e) {
-                            // There is (at least) one exception that could be hit here (EOFException, if the sig is too short)
-                            // Because I can't verify there aren't more, we use a very generic Exception catch
-                        }
-                        
-                        if (CHECKMULTISIGsigs.size() > CHECKMULTISIGpubkeys.size()) {
-                            CHECKMULTISIGValid = false;
-                            break;
-                        }
-                    }
-                    
-                    // We uselessly remove a stack object to emulate a reference client bug
-                    stack.pollLast();
-                    
-                    if (opcode == OP_CHECKMULTISIG)
-                        stack.add(CHECKMULTISIGValid ? new byte[] {1} : new byte[] {0});
-                    else if (opcode == OP_CHECKMULTISIGVERIFY)
-                        if (!CHECKMULTISIGValid)
-                            throw new ScriptException("Script failed OP_CHECKMULTISIGVERIFY");
+                    opCount = executeMultiSig(txContainingThis, (int) index, script, stack, opCount, lastCodeSepLocation, opcode);
                     break;
                 case OP_NOP1:
                 case OP_NOP2:
@@ -1465,7 +1025,7 @@ public class Script {
                     break;
                     
                 default:
-                    throw new ScriptException("Script used a reserved Op Code");
+                    throw new ScriptException("Script used a reserved opcode " + opcode);
                 }
             }
             
@@ -1477,6 +1037,128 @@ public class Script {
             throw new ScriptException("OP_IF/OP_NOTIF without OP_ENDIF");
     }
 
+    private static void executeCheckSig(Transaction txContainingThis, int index, Script script, LinkedList<byte[]> stack,
+                                        int lastCodeSepLocation, int opcode) throws ScriptException {
+        if (stack.size() < 2)
+            throw new ScriptException("Attempted OP_CHECKSIG(VERIFY) on a stack with size < 2");
+        byte[] pubKey = stack.pollLast();
+        byte[] sig = stack.pollLast();
+        if (sig.length == 0 || pubKey.length == 0)
+            throw new ScriptException("Attempted OP_CHECKSIG(VERIFY) with a sig or pubkey of length 0");
+
+        byte[] prog = script.getProgram();
+        byte[] connectedScript = Arrays.copyOfRange(prog, lastCodeSepLocation, prog.length);
+
+        UnsafeByteArrayOutputStream outStream = new UnsafeByteArrayOutputStream(sig.length + 1);
+        try {
+            writeBytes(outStream, sig);
+        } catch (IOException e) {
+            throw new RuntimeException(e); // Cannot happen
+        }
+        connectedScript = removeAllInstancesOf(connectedScript, outStream.toByteArray());
+
+        // TODO: Use int for indexes everywhere, we can't have that many inputs/outputs
+        Sha256Hash hash = txContainingThis.hashTransactionForSignature(index, connectedScript, sig[sig.length - 1]);
+
+        boolean sigValid;
+        try {
+            sigValid = ECKey.verify(hash.getBytes(), Arrays.copyOf(sig, sig.length - 1), pubKey);
+        } catch (Exception e1) {
+            // There is (at least) one exception that could be hit here (EOFException, if the sig is too short)
+            // Because I can't verify there aren't more, we use a very generic Exception catch
+            log.warn(e1.toString());
+            sigValid = false;
+        }
+
+        if (opcode == OP_CHECKSIG)
+            stack.add(sigValid ? new byte[] {1} : new byte[] {0});
+        else if (opcode == OP_CHECKSIGVERIFY)
+            if (!sigValid)
+                throw new ScriptException("Script failed OP_CHECKSIGVERIFY");
+    }
+
+    private static int executeMultiSig(Transaction txContainingThis, int index, Script script, LinkedList<byte[]> stack,
+                                       int opCount, int lastCodeSepLocation, int opcode) throws ScriptException {
+        if (stack.size() < 2)
+            throw new ScriptException("Attempted OP_CHECKMULTISIG(VERIFY) on a stack with size < 2");
+        int pubKeyCount = castToBigInteger(stack.pollLast()).intValue();
+        if (pubKeyCount < 0 || pubKeyCount > 20)
+            throw new ScriptException("OP_CHECKMULTISIG(VERIFY) with pubkey count out of range");
+        opCount += pubKeyCount;
+        if (opCount > 201)
+            throw new ScriptException("Total op count > 201 during OP_CHECKMULTISIG(VERIFY)");
+        if (stack.size() < pubKeyCount + 1)
+            throw new ScriptException("Attempted OP_CHECKMULTISIG(VERIFY) on a stack with size < num_of_pubkeys + 2");
+
+        LinkedList<byte[]> pubkeys = new LinkedList<byte[]>();
+        for (int i = 0; i < pubKeyCount; i++) {
+            byte[] pubKey = stack.pollLast();
+            if (pubKey.length == 0)
+                throw new ScriptException("Attempted OP_CHECKMULTISIG(VERIFY) with a pubkey of length 0");
+            pubkeys.add(pubKey);
+        }
+
+        int sigCount = castToBigInteger(stack.pollLast()).intValue();
+        if (sigCount < 0 || sigCount > pubKeyCount)
+            throw new ScriptException("OP_CHECKMULTISIG(VERIFY) with sig count out of range");
+        if (stack.size() < sigCount + 1)
+            throw new ScriptException("Attempted OP_CHECKMULTISIG(VERIFY) on a stack with size < num_of_pubkeys + num_of_signatures + 3");
+
+        LinkedList<byte[]> sigs = new LinkedList<byte[]>();
+        for (int i = 0; i < sigCount; i++) {
+            byte[] sig = stack.pollLast();
+            if (sig.length == 0)
+                throw new ScriptException("Attempted OP_CHECKMULTISIG(VERIFY) with a sig of length 0");
+            sigs.add(sig);
+        }
+
+        byte[] prog = script.getProgram();
+        byte[] connectedScript = Arrays.copyOfRange(prog, lastCodeSepLocation, prog.length);
+
+        for (byte[] sig : sigs) {
+            UnsafeByteArrayOutputStream outStream = new UnsafeByteArrayOutputStream(sig.length + 1);
+            try {
+                writeBytes(outStream, sig);
+            } catch (IOException e) {
+                throw new RuntimeException(e); // Cannot happen
+            }
+            connectedScript = removeAllInstancesOf(connectedScript, outStream.toByteArray());
+        }
+
+        boolean valid = true;
+        while (sigs.size() > 0) {
+            byte[] sig = sigs.getFirst();
+            byte[] pubKey = pubkeys.pollFirst();
+
+            // We could reasonably move this out of the loop, but because signature verification is significantly
+            // more expensive than hashing, its not a big deal.
+            Sha256Hash hash = txContainingThis.hashTransactionForSignature(index, connectedScript, sig[sig.length - 1]);
+            try {
+                if (ECKey.verify(hash.getBytes(), Arrays.copyOf(sig, sig.length - 1), pubKey))
+                    sigs.pollFirst();
+            } catch (Exception e) {
+                // There is (at least) one exception that could be hit here (EOFException, if the sig is too short)
+                // Because I can't verify there aren't more, we use a very generic Exception catch
+            }
+
+            if (sigs.size() > pubkeys.size()) {
+                valid = false;
+                break;
+            }
+        }
+
+        // We uselessly remove a stack object to emulate a reference client bug.
+        stack.pollLast();
+
+        if (opcode == OP_CHECKMULTISIG) {
+            stack.add(valid ? new byte[] {1} : new byte[] {0});
+        } else if (opcode == OP_CHECKMULTISIGVERIFY) {
+            if (!valid)
+                throw new ScriptException("Script failed OP_CHECKMULTISIGVERIFY");
+        }
+        return opCount;
+    }
+
     /**
      * Verifies that this script (interpreted as a scriptSig) correctly spends the given scriptPubKey.
      * @param txContainingThis The transaction in which this input scriptSig resides.
@@ -1484,11 +1166,10 @@ public class Script {
      * @param scriptSigIndex The index in txContainingThis of the scriptSig (note: NOT the index of the scriptPubKey).
      * @param scriptPubKey The connected scriptPubKey containing the conditions needed to claim the value.
      * @param enforceP2SH Whether "pay to script hash" rules should be enforced. If in doubt, set to true.
-     * @throws VerificationException if this script does not correctly spend the scriptPubKey
      */
     public void correctlySpends(Transaction txContainingThis, long scriptSigIndex, Script scriptPubKey,
                                 boolean enforceP2SH) throws ScriptException {
-        if (program.length > 10000 || scriptPubKey.program.length > 10000)
+        if (getProgram().length > 10000 || scriptPubKey.getProgram().length > 10000)
             throw new ScriptException("Script larger than 10,000 bytes");
         
         LinkedList<byte[]> stack = new LinkedList<byte[]>();
@@ -1503,7 +1184,7 @@ public class Script {
             throw new ScriptException("Stack empty at end of script execution.");
         
         if (!castToBool(stack.pollLast()))
-            throw new ScriptException("Script resulted in a non-true stack");
+            throw new ScriptException("Script resulted in a non-true stack: " + stack);
 
         // P2SH is pay to script hash. It means that the scriptPubKey has a special form which is a valid
         // program but it has "useless" form that if evaluated as a normal program always returns true.
@@ -1520,11 +1201,11 @@ public class Script {
         // TODO: Check if we can take out enforceP2SH if there's a checkpoint at the enforcement block.
         if (enforceP2SH && scriptPubKey.isPayToScriptHash()) {
             for (ScriptChunk chunk : chunks)
-                if (chunk.isOpCode && (chunk.data[0] & 0xff) > OP_16)
+                if (chunk.isOpCode() && (chunk.data[0] & 0xff) > OP_16)
                     throw new ScriptException("Attempted to spend a P2SH scriptPubKey with a script that contained script ops");
             
             byte[] scriptPubKeyBytes = p2shStack.pollLast();
-            Script scriptPubKeyP2SH = new Script(params, scriptPubKeyBytes, 0, scriptPubKeyBytes.length);
+            Script scriptPubKeyP2SH = new Script(scriptPubKeyBytes);
             
             executeScript(txContainingThis, scriptSigIndex, scriptPubKeyP2SH, p2shStack);
             

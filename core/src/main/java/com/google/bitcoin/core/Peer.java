@@ -16,6 +16,7 @@
 
 package com.google.bitcoin.core;
 
+import com.google.bitcoin.core.WalletTransaction.Pool;
 import com.google.bitcoin.store.BlockStore;
 import com.google.bitcoin.store.BlockStoreException;
 import com.google.bitcoin.utils.Locks;
@@ -149,7 +150,7 @@ public class Peer {
         this.getDataFutures = new CopyOnWriteArrayList<GetDataRequest>();
         this.eventListeners = new CopyOnWriteArrayList<PeerEventListener>();
         this.lifecycleListeners = new CopyOnWriteArrayList<PeerLifecycleListener>();
-        this.fastCatchupTimeSecs = params.genesisBlock.getTimeSeconds();
+        this.fastCatchupTimeSecs = params.getGenesisBlock().getTimeSeconds();
         this.isAcked = false;
         this.handler = new PeerHandler();
         this.pendingPings = new CopyOnWriteArrayList<PendingPing>();
@@ -283,14 +284,6 @@ public class Peer {
                 processAlert((AlertMessage) m);
             } else if (m instanceof VersionMessage) {
                 vPeerVersionMessage = (VersionMessage) m;
-                for (PeerLifecycleListener listener : lifecycleListeners)
-                    listener.onPeerConnected(this);
-                final int version = vMinProtocolVersion;
-                if (vPeerVersionMessage.clientVersion < version) {
-                    log.warn("Connected to a peer speaking protocol version {} but need {}, closing",
-                            vPeerVersionMessage.clientVersion, version);
-                    e.getChannel().close();
-                }
             } else if (m instanceof VersionAck) {
                 if (vPeerVersionMessage == null) {
                     throw new ProtocolException("got a version ack before version");
@@ -299,6 +292,16 @@ public class Peer {
                     throw new ProtocolException("got more than one version ack");
                 }
                 isAcked = true;
+                for (PeerLifecycleListener listener : lifecycleListeners)
+                    listener.onPeerConnected(this);
+                // We check min version after onPeerConnected as channel.close() will
+                // call onPeerDisconnected, and we should probably call onPeerConnected first.
+                final int version = vMinProtocolVersion;
+                if (vPeerVersionMessage.clientVersion < version) {
+                    log.warn("Connected to a peer speaking protocol version {} but need {}, closing",
+                            vPeerVersionMessage.clientVersion, version);
+                    e.getChannel().close();
+                }
             } else if (m instanceof Ping) {
                 if (((Ping) m).hasNonce())
                     sendMessage(new Pong(((Ping) m).getNonce()));
@@ -448,6 +451,10 @@ public class Peer {
     }
 
     private void processTransaction(Transaction tx) throws VerificationException, IOException {
+        // System.out.println("Peer#processTransaction tx = " + tx.getHashAsString() + ", identityHashCode = " + System.identityHashCode(tx));
+
+        // Check a few basic syntax issues to ensure the received TX isn't nonsense.
+        tx.verify();
         lock.lock();
         try {
             log.debug("{}: Received tx {}", vAddress, tx.getHashAsString());
@@ -456,6 +463,7 @@ public class Peer {
                 tx = memoryPool.seen(tx, getAddress());
             }
             final Transaction fTx = tx;
+            // System.out.println("Peer#processTransaction fTx = " + fTx.getHashAsString() + ", identityHashCode = " + System.identityHashCode(fTx));
             // Label the transaction as coming in from the P2P network (as opposed to being created by us, direct import,
             // etc). This helps the wallet decide how to risk analyze it later.
             fTx.getConfidence().setSource(TransactionConfidence.Source.NETWORK);
@@ -504,7 +512,16 @@ public class Peer {
                                 // Not much more we can do at this point.
                             }
                         });
-
+                    } else {
+                        // The transaction might be a pending transaction we already have.
+                        Transaction poolTx = memoryPool.get(tx.getHash());
+                        EnumSet<Pool> containingPools = wallet.getContainingPools(poolTx);
+                        if (containingPools.contains(Pool.PENDING)) {
+                            if (poolTx != null && poolTx.getConfidence() != null) {
+                                poolTx.getConfidence().markBroadcastBy(getAddress());
+                            }
+                        }
+                        
                     }
                 } catch (VerificationException e) {
                     log.error("Wallet failed to verify tx", e);
@@ -589,7 +606,7 @@ public class Peer {
             GetDataMessage getdata = new GetDataMessage(params);
             final long nonce = (long)(Math.random()*Long.MAX_VALUE);
             if (needToRequest.size() > 1)
-                log.info("{}: Requesting {} transactions for dep resolution", needToRequest.size());
+                log.info("{}: Requesting {} transactions for dep resolution", vAddress, needToRequest.size());
             for (Sha256Hash hash : needToRequest) {
                 getdata.addTransaction(hash);
                 GetDataRequest req = new GetDataRequest();
@@ -981,7 +998,7 @@ public class Peer {
         try {
             Preconditions.checkNotNull(blockChain);
             if (secondsSinceEpoch == 0) {
-                fastCatchupTimeSecs = params.genesisBlock.getTimeSeconds();
+                fastCatchupTimeSecs = params.getGenesisBlock().getTimeSeconds();
                 downloadBlockBodies = true;
             } else {
                 fastCatchupTimeSecs = secondsSinceEpoch;
@@ -1091,7 +1108,7 @@ public class Peer {
             }
             // Only add the locator if we didn't already do so. If the chain is < 50 blocks we already reached it.
             if (cursor != null) {
-                blockLocator.add(params.genesisBlock.getHash());
+                blockLocator.add(params.getGenesisBlock().getHash());
             }
 
             // Record that we requested this range of blocks so we can filter out duplicate requests in the event of a
@@ -1249,7 +1266,7 @@ public class Peer {
         // chainHeight should not be zero/negative because we shouldn't have given the user a Peer that is to another
         // client-mode node, nor should it be unconnected. If that happens it means the user overrode us somewhere or
         // there is a bug in the peer management code.
-        checkState(params.allowEmptyPeerChains || chainHeight > 0, "Connected to peer with zero/negative chain height", chainHeight);
+        checkState(params.allowEmptyPeerChain() || chainHeight > 0, "Connected to peer with zero/negative chain height", chainHeight);
         return chainHeight - blockChain.getBestChainHeight();
     }
 

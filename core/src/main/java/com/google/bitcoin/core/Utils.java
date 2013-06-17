@@ -27,6 +27,7 @@ import java.math.BigInteger;
 import java.nio.charset.Charset;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -347,7 +348,7 @@ public class Utils {
      * the number in big endian format (with a sign bit).
      * @param hasLength can be set to false if the given array is missing the 4 byte length field
      */
-    static BigInteger decodeMPI(byte[] mpi, boolean hasLength) {
+    public static BigInteger decodeMPI(byte[] mpi, boolean hasLength) {
         byte[] buf;
         if (hasLength) {
             int length = (int) readUint32BE(mpi, 0);
@@ -370,7 +371,7 @@ public class Utils {
      * the number in big endian format (with a sign bit).
      * @param includeLength indicates whether the 4 byte length field should be included
      */
-    static byte[] encodeMPI(BigInteger value, boolean includeLength) {
+    public static byte[] encodeMPI(BigInteger value, boolean includeLength) {
         if (value.equals(BigInteger.ZERO)) {
             if (!includeLength)
                 return new byte[] {};
@@ -432,6 +433,14 @@ public class Utils {
     }
 
     /**
+     * Sets the mock clock to the given time (in seconds)
+     * @param mockClock
+     */
+    public static void setMockClock(long mockClock) {
+        mockTime = new Date(mockClock * 1000);
+    }
+
+    /**
      * Returns the current time, or a mocked out equivalent.
      */
     public static Date now() {
@@ -445,6 +454,15 @@ public class Utils {
         byte[] out = new byte[length];
         System.arraycopy(in, 0, out, 0, Math.min(length, in.length));
         return out;
+    }
+
+    /**
+     * Creates a copy of bytes and appends b to the end of it
+     */
+    public static byte[] appendByte(byte[] bytes, byte b) {
+        byte[] result = Arrays.copyOf(bytes, bytes.length + 1);
+        result[result.length - 1] = b;
+        return result;
     }
 
     /**

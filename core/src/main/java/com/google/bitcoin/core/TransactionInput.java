@@ -16,6 +16,7 @@
 
 package com.google.bitcoin.core;
 
+import com.google.bitcoin.script.Script;
 import com.google.common.base.Preconditions;
 
 import java.io.IOException;
@@ -156,29 +157,38 @@ public class TransactionInput extends ChildMessage implements Serializable, IsMu
     }
 
     /**
-     * Returns the input script.
+     * Returns the script that is fed to the referenced output (scriptPubKey) script in order to satisfy it: usually
+     * contains signatures and maybe keys, but can contain arbitrary data if the output script accepts it.
      */
     public Script getScriptSig() throws ScriptException {
         // Transactions that generate new coins don't actually have a script. Instead this
         // parameter is overloaded to be something totally different.
         if (scriptSig == null) {
             maybeParse();
-            scriptSig = new Script(params, Preconditions.checkNotNull(scriptBytes), 0, scriptBytes.length);
+            scriptSig = new Script(Preconditions.checkNotNull(scriptBytes));
         }
         return scriptSig;
     }
 
+    /** Set the given program as the scriptSig that is supposed to satisfy the connected output script. */
+    public void setScriptSig(Script scriptSig) {
+        this.scriptSig = checkNotNull(scriptSig);
+        // TODO: This should all be cleaned up so we have a consistent internal representation.
+        setScriptBytes(scriptSig.getProgram());
+    }
+
     /**
-     * Convenience method that returns the from address of this input by parsing the scriptSig.
-     *
-     * @throws ScriptException if the scriptSig could not be understood (eg, if this is a coinbase transaction).
+     * Convenience method that returns the from address of this input by parsing the scriptSig. The concept of a
+     * "from address" is not well defined in Bitcoin and you should not assume that senders of a transaction can
+     * actually receive coins on the same address they used to sign (e.g. this is not true for shared wallets).
      */
+    @Deprecated
     public Address getFromAddress() throws ScriptException {
         if (isCoinBase()) {
             throw new ScriptException(
                     "This is a coinbase transaction which generates new coins. It does not have a from address.");
         }
-        return getScriptSig().getFromAddress();
+        return getScriptSig().getFromAddress(params);
     }
 
     /**
@@ -230,6 +240,7 @@ public class TransactionInput extends ChildMessage implements Serializable, IsMu
      */
     void setScriptBytes(byte[] scriptBytes) {
         unCache();
+        this.scriptSig = null;
         int oldLength = length;
         this.scriptBytes = scriptBytes;
         // 40 = previous_outpoint (36) + sequence (4)
@@ -259,7 +270,7 @@ public class TransactionInput extends ChildMessage implements Serializable, IsMu
         }
     }
 
-    enum ConnectionResult {
+    public enum ConnectionResult {
         NO_SUCH_TX,
         ALREADY_SPENT,
         SUCCESS
@@ -280,7 +291,7 @@ public class TransactionInput extends ChildMessage implements Serializable, IsMu
         return out;
     }
 
-    enum ConnectMode {
+    public enum ConnectMode {
         DISCONNECT_ON_CONFLICT,
         ABORT_ON_CONFLICT
     }
@@ -312,7 +323,7 @@ public class TransactionInput extends ChildMessage implements Serializable, IsMu
      * @return NO_SUCH_TX if transaction is not the prevtx, ALREADY_SPENT if there was a conflict, SUCCESS if not.
      */
     public ConnectionResult connect(Transaction transaction, ConnectMode mode) {
-        if (!transaction.getHash().equals(outpoint.getHash()) && mode != ConnectMode.DISCONNECT_ON_CONFLICT)
+        if (!transaction.getHash().equals(outpoint.getHash()))
             return ConnectionResult.NO_SUCH_TX;
         checkElementIndex((int) outpoint.getIndex(), transaction.getOutputs().size(), "Corrupt transaction");
         TransactionOutput out = transaction.getOutput((int) outpoint.getIndex());
@@ -340,7 +351,7 @@ public class TransactionInput extends ChildMessage implements Serializable, IsMu
      *
      * @return true if the disconnection took place, false if it was not connected.
      */
-    boolean disconnect() {
+    public boolean disconnect() {
         if (outpoint.fromTx == null) return false;
         TransactionOutput output = outpoint.fromTx.getOutput((int) outpoint.getIndex());
         if (output.getSpentBy() == this) {
@@ -362,6 +373,9 @@ public class TransactionInput extends ChildMessage implements Serializable, IsMu
         out.defaultWriteObject();
     }
 
+    /**
+     * @returns true if this transaction's sequence number is set (ie it may be a part of a time-locked transaction)
+     */
     public boolean hasSequence() {
         return (sequence != NO_SEQUENCE && sequence != NO_SEQUENCE_ALTERNATIVE);
     }
@@ -377,5 +391,14 @@ public class TransactionInput extends ChildMessage implements Serializable, IsMu
         Script sig = getScriptSig();
         int myIndex = parentTransaction.getInputs().indexOf(this);
         sig.correctlySpends(parentTransaction, myIndex, pubKey, true);
+    }
+
+    /**
+     * Returns the connected output, assuming the input was connected with
+     * {@link TransactionInput#connect(TransactionOutput)} or variants at some point. If it wasn't connected, then
+     * this method returns null.
+     */
+    public TransactionOutput getConnectedOutput() {
+        return getOutpoint().getConnectedOutput();
     }
 }

@@ -16,6 +16,7 @@
 
 package com.google.bitcoin.core;
 
+import com.google.bitcoin.script.Script;
 import com.google.bitcoin.store.BlockStoreException;
 import com.google.bitcoin.store.FullPrunedBlockStore;
 import org.slf4j.Logger;
@@ -179,13 +180,13 @@ public class FullPrunedBlockChain extends AbstractBlockChain {
                         // TODO: Check we're not spending the genesis transaction here. Satoshis code won't allow it.
                         valueIn = valueIn.add(prevOut.getValue());
                         if (enforcePayToScriptHash) {
-                            if (new Script(params, prevOut.getScriptBytes(), 0, prevOut.getScriptBytes().length).isPayToScriptHash())
+                            if (new Script(prevOut.getScriptBytes()).isPayToScriptHash())
                                 sigOps += Script.getP2SHSigOpCount(in.getScriptBytes());
                             if (sigOps > Block.MAX_BLOCK_SIGOPS)
                                 throw new VerificationException("Too many P2SH SigOps in block");
                         }
                         
-                        prevOutScripts.add(new Script(params, prevOut.getScriptBytes(), 0, prevOut.getScriptBytes().length));
+                        prevOutScripts.add(new Script(prevOut.getScriptBytes()));
                         
                         //in.getScriptSig().correctlySpends(tx, index, new Script(params, prevOut.getScriptBytes(), 0, prevOut.getScriptBytes().length));
                         
@@ -231,7 +232,7 @@ public class FullPrunedBlockChain extends AbstractBlockChain {
                     throw new RuntimeException(thrownE); // Shouldn't happen
                 } catch (ExecutionException thrownE) {
                     log.error("Script.correctlySpends threw a non-normal exception: " + thrownE.getCause());
-                    throw new VerificationException("Bug in Script.correctlySpends, likely script malformed in some new and interesting way.");
+                    throw new VerificationException("Bug in Script.correctlySpends, likely script malformed in some new and interesting way.", thrownE);
                 }
                 if (e != null)
                     throw e;
@@ -302,14 +303,14 @@ public class FullPrunedBlockChain extends AbstractBlockChain {
                                 throw new VerificationException("Tried to spend coinbase at depth " + (newBlock.getHeight() - prevOut.getHeight()));
                             valueIn = valueIn.add(prevOut.getValue());
                             if (enforcePayToScriptHash) {
-                                Script script = new Script(params, prevOut.getScriptBytes(), 0, prevOut.getScriptBytes().length);
+                                Script script = new Script(prevOut.getScriptBytes());
                                 if (script.isPayToScriptHash())
                                     sigOps += Script.getP2SHSigOpCount(in.getScriptBytes());
                                 if (sigOps > Block.MAX_BLOCK_SIGOPS)
                                     throw new VerificationException("Too many P2SH SigOps in block");
                             }
                             
-                            prevOutScripts.add(new Script(params, prevOut.getScriptBytes(), 0, prevOut.getScriptBytes().length));
+                            prevOutScripts.add(new Script(prevOut.getScriptBytes()));
                             
                             blockStore.removeUnspentTransactionOutput(prevOut);
                             txOutsSpent.add(prevOut);
@@ -355,7 +356,7 @@ public class FullPrunedBlockChain extends AbstractBlockChain {
                         throw new RuntimeException(thrownE); // Shouldn't happen
                     } catch (ExecutionException thrownE) {
                         log.error("Script.correctlySpends threw a non-normal exception: " + thrownE.getCause());
-                        throw new VerificationException("Bug in Script.correctlySpends, likely script malformed in some new and interesting way.");
+                        throw new VerificationException("Bug in Script.correctlySpends, likely script malformed in some new and interesting way.", thrownE);
                     }
                     if (e != null)
                         throw e;

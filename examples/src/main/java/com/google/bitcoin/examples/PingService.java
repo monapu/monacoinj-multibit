@@ -19,6 +19,8 @@ package com.google.bitcoin.examples;
 import com.google.bitcoin.core.*;
 import com.google.bitcoin.crypto.KeyCrypterException;
 import com.google.bitcoin.discovery.DnsDiscovery;
+import com.google.bitcoin.params.MainNetParams;
+import com.google.bitcoin.params.TestNet3Params;
 import com.google.bitcoin.store.BlockStore;
 import com.google.bitcoin.store.SPVBlockStore;
 import com.google.bitcoin.utils.BriefLogFormatter;
@@ -39,7 +41,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
  * </p>
  *
  * <p>
- * If running on TestNet (slow but better than using real coins on prodnet) do the following:
+ * If running on TestNet (slow but better than using real coins on the main network) do the following:
  * <ol>
  * <li>Backup your current wallet.dat in case of unforeseen problems</li>
  * <li>Start your bitcoin client in test mode <code>bitcoin -testnet</code>. This will create a new sub-directory called testnet and should not interfere with normal wallets or operations.</li>
@@ -57,7 +59,6 @@ import static com.google.common.base.Preconditions.checkNotNull;
  */
 public class PingService {
     private final PeerGroup peerGroup;
-    private final BlockChain chain;
     private final BlockStore blockStore;
     private final File walletFile;
 
@@ -68,8 +69,8 @@ public class PingService {
 
     public PingService(String[] args) throws Exception {
         boolean testNet = args.length > 0 && args[0].equalsIgnoreCase("testnet");
-        final NetworkParameters params = testNet ? NetworkParameters.testNet() : NetworkParameters.prodNet();
-        String filePrefix = testNet ? "pingservice-testnet" : "pingservice-prodnet";
+        final NetworkParameters params = testNet ? TestNet3Params.get() : MainNetParams.get();
+        String filePrefix = testNet ? "pingservice-testnet" : "pingservice-mainnet";
         // Try to read the wallet from storage, create a new one if not possible.
         walletFile = new File(filePrefix + ".wallet");
         Wallet w;
@@ -77,7 +78,7 @@ public class PingService {
             w = Wallet.loadFromFile(walletFile);
         } catch (IOException e) {
             w = new Wallet(params);
-            w.keychain.add(new ECKey());
+            w.addKey(new ECKey());
             w.saveToFile(walletFile);
         }
         final Wallet wallet = w;
@@ -95,7 +96,7 @@ public class PingService {
                 CheckpointManager.checkpoint(params, stream, blockStore, key.getCreationTimeSeconds());
             }
         }
-        chain = new BlockChain(params, wallet, blockStore);
+        BlockChain chain = new BlockChain(params, wallet, blockStore);
         // Connect to the localhost node. One minute timeout since we won't try any other peers
         System.out.println("Connecting ...");
         peerGroup = new PeerGroup(params, chain);

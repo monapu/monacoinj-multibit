@@ -18,22 +18,26 @@
 package com.google.bitcoin.core;
 
 import com.google.bitcoin.core.Transaction.SigHash;
+import com.google.bitcoin.params.MainNetParams;
+import com.google.bitcoin.params.UnitTestParams;
+import com.google.bitcoin.script.Script;
+import com.google.bitcoin.store.BlockStoreException;
 import com.google.bitcoin.store.FullPrunedBlockStore;
 import com.google.bitcoin.store.MemoryFullPrunedBlockStore;
+import com.google.bitcoin.utils.BlockFileLoader;
 import com.google.bitcoin.utils.BriefLogFormatter;
-import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.IOException;
 import java.lang.ref.WeakReference;
-import java.util.List;
+import java.util.Arrays;
 
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.*;
 
 /**
  * We don't do any wallet tests here, we leave that to {@link ChainSplitTest}
@@ -42,37 +46,30 @@ import static org.junit.Assert.fail;
 public class FullPrunedBlockChainTest {
     private static final Logger log = LoggerFactory.getLogger(FullPrunedBlockChainTest.class);
 
-    // The number of undoable blocks to keep around
-    private static final int UNDOABLE_BLOCKS_STORED = 10;
-    
-    private NetworkParameters unitTestParams;
+    private NetworkParameters params;
     private FullPrunedBlockChain chain;
     private FullPrunedBlockStore store;
-
-    private int oldInterval;
 
     @Before
     public void setUp() throws Exception {
         BriefLogFormatter.init();
-        unitTestParams = NetworkParameters.unitTests();
-        oldInterval = unitTestParams.interval;
-        unitTestParams.interval = 10000;
-        
-        store = new MemoryFullPrunedBlockStore(unitTestParams, UNDOABLE_BLOCKS_STORED);
-        chain = new FullPrunedBlockChain(unitTestParams, store);
+        params = new UnitTestParams() {
+            @Override public int getInterval() {
+                return 10000;
+            }
+        };
     }
 
-    @After
-    public void tearDown() {
-        unitTestParams.interval = oldInterval;
-    }
-    
     @Test
     public void testGeneratedChain() throws Exception {
         // Tests various test cases from FullBlockTestGenerator
-        FullBlockTestGenerator generator = new FullBlockTestGenerator(unitTestParams);
-        List<BlockAndValidity> blockList = generator.getBlocksToTest(false);
-        for (BlockAndValidity block : blockList) {
+        FullBlockTestGenerator generator = new FullBlockTestGenerator(params);
+        BlockAndValidityList blockList = generator.getBlocksToTest(false, false, null);
+        
+        store = new MemoryFullPrunedBlockStore(params, blockList.maximumReorgBlockCount);
+        chain = new FullPrunedBlockChain(params, store);
+        
+        for (BlockAndValidity block : blockList.list) {
             boolean threw = false;
             try {
                 if (chain.add(block.block) != block.connects) {
@@ -83,7 +80,7 @@ public class FullPrunedBlockChainTest {
                 threw = true;
                 if (!block.throwsException) {
                     log.error("Block didn't match throws flag on block " + block.blockName);
-                    fail();
+                    throw e;
                 }
                 if (block.connects) {
                     log.error("Block didn't match connects flag on block " + block.blockName);
@@ -98,22 +95,30 @@ public class FullPrunedBlockChainTest {
                 log.error("New block head didn't match the correct value after block " + block.blockName);
                 fail();
             }
+            if (chain.getChainHead().getHeight() != block.heightAfterBlock) {
+                log.error("New block head didn't match the correct height after block " + block.blockName);
+                fail();
+            }
         }
     }
     
     @Test
     public void testFinalizedBlocks() throws Exception {
+        final int UNDOABLE_BLOCKS_STORED = 10;
+        store = new MemoryFullPrunedBlockStore(params, UNDOABLE_BLOCKS_STORED);
+        chain = new FullPrunedBlockChain(params, store);
+        
         // Check that we aren't accidentally leaving any references
         // to the full StoredUndoableBlock's lying around (ie memory leaks)
         
         ECKey outKey = new ECKey();
         
         // Build some blocks on genesis block to create a spendable output
-        Block rollingBlock = unitTestParams.genesisBlock.createNextBlockWithCoinbase(outKey.getPubKey());
+        Block rollingBlock = params.getGenesisBlock().createNextBlockWithCoinbase(outKey.getPubKey());
         chain.add(rollingBlock);
-        TransactionOutPoint spendableOutput = new TransactionOutPoint(unitTestParams, 0, rollingBlock.getTransactions().get(0).getHash());
+        TransactionOutPoint spendableOutput = new TransactionOutPoint(params, 0, rollingBlock.getTransactions().get(0).getHash());
         byte[] spendableOutputScriptPubKey = rollingBlock.getTransactions().get(0).getOutputs().get(0).getScriptBytes();
-        for (int i = 1; i < unitTestParams.getSpendableCoinbaseDepth(); i++) {
+        for (int i = 1; i < params.getSpendableCoinbaseDepth(); i++) {
             rollingBlock = rollingBlock.createNextBlockWithCoinbase(outKey.getPubKey());
             chain.add(rollingBlock);
         }
@@ -122,9 +127,9 @@ public class FullPrunedBlockChainTest {
                                        (store.getTransactionOutput(spendableOutput.getHash(), spendableOutput.getIndex()));
         rollingBlock = rollingBlock.createNextBlock(null);
         
-        Transaction t = new Transaction(unitTestParams);
+        Transaction t = new Transaction(params);
         // Entirely invalid scriptPubKey
-        t.addOutput(new TransactionOutput(unitTestParams, t, Utils.toNanoCoins(50, 0), new byte[] {}));
+        t.addOutput(new TransactionOutput(params, t, Utils.toNanoCoins(50, 0), new byte[] {}));
         addInputToTransaction(t, spendableOutput, spendableOutputScriptPubKey, outKey);
         rollingBlock.addTransaction(t);
         rollingBlock.solve();
@@ -133,10 +138,10 @@ public class FullPrunedBlockChainTest {
         WeakReference<StoredUndoableBlock> undoBlock = new WeakReference<StoredUndoableBlock>(store.getUndoBlock(rollingBlock.getHash()));
 
         StoredUndoableBlock storedUndoableBlock = undoBlock.get();
-        assertTrue(storedUndoableBlock != null);
-        assertTrue(storedUndoableBlock.getTransactions() == null);
+        assertNotNull(storedUndoableBlock);
+        assertNull(storedUndoableBlock.getTransactions());
         WeakReference<TransactionOutputChanges> changes = new WeakReference<TransactionOutputChanges>(storedUndoableBlock.getTxOutChanges());
-        assertTrue(changes.get() != null);
+        assertNotNull(changes.get());
         storedUndoableBlock = null;   // Blank the reference so it can be GCd.
         
         // Create a chain longer than UNDOABLE_BLOCKS_STORED
@@ -146,13 +151,13 @@ public class FullPrunedBlockChainTest {
         }
         // Try to get the garbage collector to run
         System.gc();
-        assertTrue(undoBlock.get() == null);
-        assertTrue(changes.get() == null);
-        assertTrue(out.get() == null);
+        assertNull(undoBlock.get());
+        assertNull(changes.get());
+        assertNull(out.get());
     }
     
     private void addInputToTransaction(Transaction t, TransactionOutPoint prevOut, byte[] prevOutScriptPubKey, ECKey sigKey) throws ScriptException {
-        TransactionInput input = new TransactionInput(unitTestParams, t, new byte[]{}, prevOut);
+        TransactionInput input = new TransactionInput(params, t, new byte[]{}, prevOut);
         t.addInput(input);
 
         Sha256Hash hash = t.hashTransactionForSignature(0, prevOutScriptPubKey, SigHash.ALL, false);
@@ -168,5 +173,17 @@ public class FullPrunedBlockChainTest {
         } catch (IOException e) {
             throw new RuntimeException(e);  // Cannot happen.
         }
+    }
+    
+    @Test
+    public void testFirst100KBlocks() throws BlockStoreException, VerificationException, PrunedException {
+        NetworkParameters params = MainNetParams.get();
+        File blockFile = new File(getClass().getResource("first-100k-blocks.dat").getFile());
+        BlockFileLoader loader = new BlockFileLoader(params, Arrays.asList(new File[] {blockFile}));
+        
+        store = new MemoryFullPrunedBlockStore(params, 10);
+        chain = new FullPrunedBlockChain(params, store);
+        for (Block block : loader)
+            chain.add(block);
     }
 }

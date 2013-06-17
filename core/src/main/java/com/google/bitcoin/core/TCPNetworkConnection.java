@@ -158,7 +158,7 @@ public class TCPNetworkConnection implements NetworkConnection {
         // implementations claim to have a block chain in their services field but then report a height of zero, filter
         // them out here.
         if (!versionMessage.hasBlockChain() ||
-                (!params.allowEmptyPeerChains && versionMessage.bestHeight <= 0)) {
+                (!params.allowEmptyPeerChain() && versionMessage.bestHeight <= 0)) {
             // Shut down the channel
             throw new ProtocolException("Peer does not have a copy of the block chain.");
         }
@@ -178,7 +178,7 @@ public class TCPNetworkConnection implements NetworkConnection {
 
     @Override
     public String toString() {
-        return "[" + remoteIp.getHostAddress() + "]:" + params.port;
+        return "[" + remoteIp.getHostAddress() + "]:" + params.getPort();
     }
 
     public class NetworkHandler extends ReplayingDecoder<VoidEnum> implements ChannelDownstreamHandler {
@@ -244,7 +244,7 @@ public class TCPNetworkConnection implements NetworkConnection {
     }
 
     public PeerAddress getPeerAddress() {
-        return new PeerAddress(remoteIp, params.port);
+        return new PeerAddress(remoteIp, params.getPort());
     }
 
     public void close() {

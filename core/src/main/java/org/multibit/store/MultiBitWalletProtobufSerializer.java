@@ -16,18 +16,17 @@
 
 package org.multibit.store;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.math.BigInteger;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
-import java.util.*;
-
-import com.google.bitcoin.crypto.EncryptedPrivateKey;
-import com.google.bitcoin.crypto.KeyCrypter;
-import com.google.bitcoin.crypto.KeyCrypterException;
-import com.google.bitcoin.crypto.KeyCrypterScrypt;
+import java.util.Date;
+import java.util.ListIterator;
+import java.util.Map;
 
 import org.bitcoinj.wallet.Protos;
 import org.bitcoinj.wallet.Protos.Wallet.EncryptionType;
@@ -45,14 +44,15 @@ import com.google.bitcoin.core.TransactionInput;
 import com.google.bitcoin.core.TransactionOutPoint;
 import com.google.bitcoin.core.TransactionOutput;
 import com.google.bitcoin.core.Wallet;
+import com.google.bitcoin.core.WalletExtension;
 import com.google.bitcoin.core.WalletTransaction;
-import com.google.bitcoin.store.WalletExtensionSerializer;
+import com.google.bitcoin.crypto.EncryptedPrivateKey;
+import com.google.bitcoin.crypto.KeyCrypter;
+import com.google.bitcoin.crypto.KeyCrypterScrypt;
 import com.google.bitcoin.store.WalletProtobufSerializer;
 import com.google.common.base.Preconditions;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.TextFormat;
-
-import static com.google.common.base.Preconditions.checkNotNull;
 
 /**
  * Serialize and de-serialize a wallet to a byte stream containing a
@@ -85,7 +85,6 @@ public class MultiBitWalletProtobufSerializer extends WalletProtobufSerializer {
 
     public MultiBitWalletProtobufSerializer() {
         super();
-        setWalletExtensionSerializer(new MultiBitWalletExtensionSerializer());
     }
 
     /**
@@ -188,17 +187,24 @@ public class MultiBitWalletProtobufSerializer extends WalletProtobufSerializer {
             }
         }
 
+        populateExtensions(wallet, walletBuilder);
+
         // Populate the wallet version.
         if (wallet.getVersion() != null) {
             walletBuilder.setVersion(wallet.getVersion().getWalletVersionAsInt());
         }
-            
-        Collection<Protos.Extension> extensions = helper.getExtensionsToWrite(wallet);
-        for(Protos.Extension ext : extensions) {
-            walletBuilder.addExtension(ext);
-        }
 
         return walletBuilder.build();
+    }
+
+    private static void populateExtensions(Wallet wallet, Protos.Wallet.Builder walletBuilder) {
+        for (WalletExtension extension : wallet.getExtensions().values()) {
+            Protos.Extension.Builder proto = Protos.Extension.newBuilder();
+            proto.setId(extension.getWalletExtensionID());
+            proto.setMandatory(extension.isWalletExtensionMandatory());
+            proto.setData(ByteString.copyFrom(extension.serializeWalletExtension()));
+            walletBuilder.addExtension(proto);
+        }
     }
 
     protected static Protos.Transaction makeTxProto(WalletTransaction wtx) {
@@ -321,7 +327,7 @@ public class MultiBitWalletProtobufSerializer extends WalletProtobufSerializer {
     public Wallet readWallet(InputStream input) throws IOException {
         Protos.Wallet walletProto = parseToProto(input);
 
-        System.out.println(TextFormat.printToString(walletProto));
+        // System.out.println(TextFormat.printToString(walletProto));
 
         // Read the scrypt parameters that specify how encryption and decryption is performed.
         EncryptionType walletEncryptionType = EncryptionType.UNENCRYPTED;
@@ -340,12 +346,32 @@ public class MultiBitWalletProtobufSerializer extends WalletProtobufSerializer {
         }
 
         NetworkParameters params = NetworkParameters.fromID(walletProto.getNetworkIdentifier());
-        Wallet wallet = helper.newWallet(params, keyCrypter);
 
+        Wallet wallet = new Wallet(params, keyCrypter);
+        readWallet(walletProto, wallet);
+        return wallet;
+    }
+    
+    /**
+     * Loads wallet data from the given protocol buffer and inserts it into the given Wallet object. This is primarily
+     * useful when you wish to pre-register extension objects. Note that if loading fails the provided Wallet object
+     * may be in an indeterminate state and should be thrown away.
+     *
+     * @throws IOException if there is a problem reading the stream.
+     * @throws IllegalArgumentException if the wallet is corrupt.
+     */
+    public void readWallet(Protos.Wallet walletProto, Wallet wallet) throws IOException {        
         if (walletProto.hasDescription()) {
             wallet.setDescription(walletProto.getDescription());
         }
 
+        // Read the scrypt parameters that specify how encryption and decryption is performed.
+        EncryptionType walletEncryptionType = EncryptionType.UNENCRYPTED;
+        
+        if (walletProto.hasEncryptionType()) {
+            walletEncryptionType = walletProto.getEncryptionType();
+        }
+        
         // Read all keys
         for (Protos.Key keyProto : walletProto.getKeyList()) {
             if (!(keyProto.getType() == Protos.Key.Type.ORIGINAL || keyProto.getType() == Protos.Key.Type.ENCRYPTED_SCRYPT_AES)) {
@@ -363,6 +389,8 @@ public class MultiBitWalletProtobufSerializer extends WalletProtobufSerializer {
             byte[] pubKey = keyProto.hasPublicKey() ? keyProto.getPublicKey().toByteArray() : null;
 
             ECKey ecKey = null;
+
+            final KeyCrypter keyCrypter = wallet.getKeyCrypter();
             if (keyCrypter != null && keyCrypter.getUnderstoodEncryptionType() != EncryptionType.UNENCRYPTED) {
                 // If the key is encrypted construct an ECKey using the encrypted private key bytes.
                 ecKey = new ECKey(encryptedPrivateKey, pubKey, keyCrypter);
@@ -376,7 +404,7 @@ public class MultiBitWalletProtobufSerializer extends WalletProtobufSerializer {
 
         // Read all transactions and insert into the txMap.
         for (Protos.Transaction txProto : walletProto.getTransactionList()) {
-            readTransaction(txProto, params);
+            readTransaction(txProto, wallet.getParams());
         }
 
         // Update transaction outputs to point to inputs that spend them
@@ -397,9 +425,7 @@ public class MultiBitWalletProtobufSerializer extends WalletProtobufSerializer {
             wallet.setLastBlockSeenHeight(walletProto.getLastSeenBlockHeight());
         }
 
-        for (Protos.Extension extProto : walletProto.getExtensionList()) {
-            helper.readExtension(wallet, extProto);
-        }
+        loadExtensions(wallet, walletProto);
 
         if (walletProto.hasVersion()) {
             int version = walletProto.getVersion();
@@ -431,8 +457,32 @@ public class MultiBitWalletProtobufSerializer extends WalletProtobufSerializer {
 
         // Make sure the object can be re-used to read another wallet without corruption.
         txMap.clear();
-
-        return wallet;
+    }
+    
+    private static void loadExtensions(Wallet wallet, Protos.Wallet walletProto) {
+        final Map<String, WalletExtension> extensions = wallet.getExtensions();
+        for (Protos.Extension extProto : walletProto.getExtensionList()) {
+            String id = extProto.getId();
+            WalletExtension extension = extensions.get(id);
+            if (extension == null) {
+                if (extProto.getMandatory()) {
+                    // If the extension is the ORG_MULTIBIT_WALLET_PROTECT or ORG_MULTIBIT_WALLET_PROTECT_2 then we know about that.
+                    // This is a marker extension to prevent earlier versions of multibit loading encrypted wallets.
+                    
+                    // Unfortunately I merged the recognition of the ORG_MULTIBIT_WALLET_PROTECT mandatory extension into the v0.4 code
+                    // so it could load encrypted wallets mistakenly.
+                    
+                    // Hence the v0.5 code now writes ORG_MULTIBIT_WALLET_PROTECT_2.
+                    if (!(extProto.getId().equals(MultiBitWalletProtobufSerializer.ORG_MULTIBIT_WALLET_PROTECT) || 
+                            extProto.getId().equals(MultiBitWalletProtobufSerializer.ORG_MULTIBIT_WALLET_PROTECT_2))) {
+                        throw new IllegalArgumentException("Did not understand a mandatory extension in the wallet of '" + extProto.getId() + "'");
+                    }
+                }
+            } else {
+                log.info("Loading wallet extension {}", id);
+                extension.deserializeWalletExtension(extProto.getData().toByteArray());
+            }
+        }
     }
 
     /**
@@ -498,19 +548,6 @@ public class MultiBitWalletProtobufSerializer extends WalletProtobufSerializer {
         txMap.put(txProto.getHash(), tx);
     }
     
-    /**
-     * Formats the given Wallet to the given output stream in protocol buffer format.
-     * Add a mandatory extension so that it will not be loaded by older versions.
-     */
-    public void writeWalletWithMandatoryExtension(Wallet wallet, OutputStream output) throws IOException {
-        Protos.Wallet walletProto = walletToProto(wallet);
-        Protos.Wallet.Builder walletBuilder = Protos.Wallet.newBuilder(walletProto);
-        Protos.Extension.Builder extensionBuilder = Protos.Extension.newBuilder().setId(ORG_MULTIBIT_WALLET_PROTECT_2).setData(ByteString.copyFrom(new byte[0x01])).setMandatory(true);
-        walletBuilder.addExtension(extensionBuilder);
-        Protos.Wallet walletProtoWithMandatory = walletBuilder.build();
-        walletProtoWithMandatory.writeTo(output);
-    }
-    
     protected WalletTransaction connectTransactionOutputs(org.bitcoinj.wallet.Protos.Transaction txProto) {
         Transaction tx = txMap.get(txProto.getHash());
         WalletTransaction.Pool pool = WalletTransaction.Pool.valueOf(txProto.getPool().getNumber());
@@ -545,8 +582,20 @@ public class MultiBitWalletProtobufSerializer extends WalletProtobufSerializer {
             log.warn("Unknown confidence type for tx {}", tx.getHashAsString());
             return;
         }
-        ConfidenceType confidenceType =
-            TransactionConfidence.ConfidenceType.valueOf(confidenceProto.getType().getNumber());
+
+        ConfidenceType confidenceType;
+        switch (confidenceProto.getType()) {
+            case BUILDING: confidenceType = ConfidenceType.BUILDING; break;
+            case DEAD: confidenceType = ConfidenceType.DEAD; break;
+            // These two are equivalent (must be able to read old wallets).
+            case NOT_IN_BEST_CHAIN: confidenceType = ConfidenceType.PENDING; break;
+            case NOT_SEEN_IN_CHAIN: confidenceType = ConfidenceType.PENDING; break;
+            case UNKNOWN:
+                // Fall through.
+            default:
+                confidenceType = ConfidenceType.UNKNOWN; break;
+        }
+
         confidence.setConfidenceType(confidenceType);
         if (confidenceProto.hasAppearedAtHeight()) {
             if (confidence.getConfidenceType() != ConfidenceType.BUILDING) {

@@ -168,6 +168,8 @@ public class MemoryPool {
      * @return An object that is semantically the same TX but may be a different object instance.
      */
     public Transaction seen(Transaction tx, PeerAddress byPeer) {
+        // System.out.println("MemoryPool#seen peer " + byPeer.toString() + ", tx = " + tx.getHashAsString() + ", identityHashCode = " + System.identityHashCode(tx));
+
         boolean skipUnlock = false;
         lock.lock();
         try {
@@ -245,8 +247,8 @@ public class MemoryPool {
                     Transaction tx = entry.tx.get();
                     if (tx != null) {
                         markBroadcast(byPeer, tx);
-                        log.debug("{}: Announced transaction we have seen before [{}] {}",
-                                new Object[]{byPeer, tx.getConfidence().numBroadcastPeers(), tx.getHashAsString()});
+                        log.debug("{}: Peer announced transaction we have seen before [{}] {}",
+                                new Object[]{byPeer, tx.getConfidence().numBroadcastPeers(), tx.getHashAsString() + " " + System.identityHashCode(tx)});
                     } else {
                         // The inv is telling us about a transaction that we previously downloaded, and threw away because
                         // nothing found it interesting enough to keep around. So do nothing.
@@ -254,7 +256,7 @@ public class MemoryPool {
                 } else {
                     checkNotNull(entry.addresses);
                     entry.addresses.add(byPeer);
-                    log.debug("{}: Announced transaction we have seen announced before [{}] {}",
+                    log.debug("{}: Peer announced transaction we have seen announced before [{}] {}",
                             new Object[]{byPeer, entry.addresses.size(), hash});
                 }
             } else {
@@ -264,7 +266,7 @@ public class MemoryPool {
                 entry.addresses = new HashSet<PeerAddress>();
                 entry.addresses.add(byPeer);
                 memoryPool.put(hash, entry);
-                log.info("{}: Announced new transaction [1] {}", byPeer, hash);
+                log.info("{}: Peer announced new transaction [1] {}", byPeer, hash);
             }
         } finally {
             lock.unlock();
@@ -274,6 +276,7 @@ public class MemoryPool {
     private void markBroadcast(PeerAddress byPeer, Transaction tx) {
         // Marking a TX as broadcast by a peer can run event listeners that might call back into Peer or PeerGroup.
         // Thus we unlock ourselves here to avoid potential inversions.
+        //System.out.println("MemoryPool#markBroadcastBy peer " + byPeer.toString() + ", tx = " + tx.getHashAsString() + ", identityHashCode = " + System.identityHashCode(tx));
         checkState(lock.isLocked());
         lock.unlock();
         try {

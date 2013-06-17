@@ -18,6 +18,7 @@ package com.google.bitcoin.core;
 
 import com.google.bitcoin.discovery.PeerDiscovery;
 import com.google.bitcoin.discovery.PeerDiscoveryException;
+import com.google.bitcoin.params.UnitTestParams;
 import com.google.bitcoin.store.MemoryBlockStore;
 import org.junit.After;
 import org.junit.Before;
@@ -34,12 +35,12 @@ import java.util.concurrent.TimeUnit;
 import static org.junit.Assert.*;
 
 public class PeerGroupTest extends TestWithPeerGroup {
-    static final NetworkParameters params = NetworkParameters.unitTests();
+    static final NetworkParameters params = UnitTestParams.get();
     
     @Override
     @Before
     public void setUp() throws Exception {
-        super.setUp(new MemoryBlockStore(NetworkParameters.unitTests()));
+        super.setUp(new MemoryBlockStore(UnitTestParams.get()));
         
         peerGroup.addWallet(wallet);
     }
@@ -305,7 +306,7 @@ public class PeerGroupTest extends TestWithPeerGroup {
         
         // Do the same thing with an offline transaction.
         peerGroup.removeWallet(wallet);
-        Transaction t3 = wallet.sendCoinsOffline(Wallet.SendRequest.to(dest, Utils.toNanoCoins(2, 0)));
+        Transaction t3 = wallet.sendCoinsOffline(Wallet.SendRequest.to(dest, Utils.toNanoCoins(2, 0)), false);
         assertNull(outbound(p1));  // Nothing sent.
         // Add the wallet to the peer group (simulate initialization). Transactions should be announced.
         peerGroup.addWallet(wallet);

@@ -18,6 +18,8 @@ package com.google.bitcoin.examples.toywallet;
 
 import com.google.bitcoin.core.*;
 import com.google.bitcoin.discovery.DnsDiscovery;
+import com.google.bitcoin.params.MainNetParams;
+import com.google.bitcoin.params.TestNet3Params;
 import com.google.bitcoin.store.H2FullPrunedBlockStore;
 import com.google.bitcoin.store.SPVBlockStore;
 import com.google.bitcoin.utils.BriefLogFormatter;
@@ -113,9 +115,9 @@ public class ToyWallet {
     public ToyWallet(boolean testnet, boolean fullChain, String[] args) throws Exception {
         // Set up a Bitcoin connection + empty wallet. TODO: Simplify the setup for this use case.
         if (testnet) {
-            params = NetworkParameters.testNet();
+            params = TestNet3Params.get();
         } else {
-            params = NetworkParameters.prodNet();
+            params = MainNetParams.get();
         }
 
         // Try to read the wallet from storage, create a new one if not possible.
@@ -151,7 +153,7 @@ public class ToyWallet {
             wallet.saveToFile(walletFile);
             freshWallet = true;
         }
-        System.out.println("Send to: " + wallet.keychain.get(0).toAddress(params));
+        System.out.println("Send to: " + wallet.getKeys().get(0).toAddress(params));
         System.out.println(wallet);
 
         //wallet.autosaveToFile(walletFile, 500, TimeUnit.MILLISECONDS, null);
@@ -238,7 +240,7 @@ public class ToyWallet {
     }
 
     private void setupWindow(JFrame window) {
-        final Address address = wallet.keychain.get(0).toAddress(params);
+        final Address address = wallet.getKeys().get(0).toAddress(params);
         JLabel instructions = new JLabel(
                 "<html>Broadcast transactions appear below. Watch them gain confidence.<br>" +
                 "Send coins to: <b>" + address + "</b> <i>(click to place on clipboard)</i>");

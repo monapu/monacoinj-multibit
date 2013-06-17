@@ -42,7 +42,6 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
@@ -201,7 +200,7 @@ public class PeerGroup extends AbstractIdleService {
     public PeerGroup(NetworkParameters params, AbstractBlockChain chain, ClientBootstrap bootstrap) {
         this.params = params;
         this.chain = chain;  // Can be null.
-        this.fastCatchupTimeSecs = params.genesisBlock.getTimeSeconds();
+        this.fastCatchupTimeSecs = params.getGenesisBlock().getTimeSeconds();
         this.wallets = new CopyOnWriteArrayList<Wallet>();
 
         // This default sentinel value will be overridden by one of two actions:
@@ -486,7 +485,7 @@ public class PeerGroup extends AbstractIdleService {
 
     /** Convenience method for addAddress(new PeerAddress(address, params.port)); */
     public void addAddress(InetAddress address) {
-        addAddress(new PeerAddress(address, params.port));
+        addAddress(new PeerAddress(address, params.getPort()));
     }
 
     /**
@@ -1153,7 +1152,7 @@ public class PeerGroup extends AbstractIdleService {
                         // Thread safe - this can run in parallel.
                         final TransactionConfidence conf = tx.getConfidence();
                         int numSeenPeers = conf.numBroadcastPeers();
-                        boolean mined = conf.getConfidenceType() != TransactionConfidence.ConfidenceType.NOT_SEEN_IN_CHAIN;
+                        boolean mined = tx.getAppearsInHashes() != null;
                         log.info("broadcastTransaction: TX {} seen by {} peers{}",
                                  new Object[]{pinnedTx.getHashAsString(), numSeenPeers, mined ? " and mined" : ""});
                         if (!(numSeenPeers >= minConnections || mined))
@@ -1185,6 +1184,11 @@ public class PeerGroup extends AbstractIdleService {
                                 return;
                             }
                         }
+                        
+                        // Add the tx to the memory pool so that it is the canonical object that has
+                        // transaction confidence, and listeners, set up.
+                        memoryPool.seen(pinnedTx, somePeer.getAddress());
+                        
                         // We're done! It's important that the PeerGroup lock is not held (by this thread) at this
                         // point to avoid triggering inversions when the Future completes.
                         log.info("broadcastTransaction: {} complete", pinnedTx.getHashAsString());

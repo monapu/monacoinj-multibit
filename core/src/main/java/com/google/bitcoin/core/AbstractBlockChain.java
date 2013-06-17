@@ -20,6 +20,8 @@ import com.google.bitcoin.store.BlockStore;
 import com.google.bitcoin.store.BlockStoreException;
 import com.google.bitcoin.utils.Locks;
 import com.google.common.base.Preconditions;
+import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.SettableFuture;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -317,6 +319,12 @@ public abstract class AbstractBlockChain {
             // If we want to verify transactions (ie we are running with full blocks), verify that block has transactions
             if (shouldVerifyTransactions() && block.transactions == null)
                 throw new VerificationException("Got a block header while running in full-block mode");
+
+            // Check for already-seen block, but only for full pruned mode, where the DB is
+            // more likely able to handle these queries quickly.
+            if (shouldVerifyTransactions() && blockStore.get(block.getHash()) != null) {
+                return true;
+            }
 
             // Does this block contain any transactions we might care about? Check this up front before verifying the
             // blocks validity so we can skip the merkle root verification if the contents aren't interesting. This saves
@@ -714,7 +722,7 @@ public abstract class AbstractBlockChain {
         Block prev = storedPrev.getHeader();
         
         // Is this supposed to be a difficulty transition point?
-        if ((storedPrev.getHeight() + 1) % params.interval != 0) {
+        if ((storedPrev.getHeight() + 1) % params.getInterval() != 0) {
 
             // TODO: Refactor this hack after 0.5 is released and we stop supporting deserialization compatibility.
             // This should be a method of the NetworkParameters, which should in turn be using singletons and a subclass
@@ -736,7 +744,7 @@ public abstract class AbstractBlockChain {
         // two weeks after the initial block chain download.
         long now = System.currentTimeMillis();
         StoredBlock cursor = blockStore.get(prev.getHash());
-        for (int i = 0; i < params.interval - 1; i++) {
+        for (int i = 0; i < params.getInterval() - 1; i++) {
             if (cursor == null) {
                 // This should never happen. If it does, it means we are following an incorrect or busted chain.
                 throw new VerificationException(
@@ -751,18 +759,19 @@ public abstract class AbstractBlockChain {
         Block blockIntervalAgo = cursor.getHeader();
         int timespan = (int) (prev.getTimeSeconds() - blockIntervalAgo.getTimeSeconds());
         // Limit the adjustment step.
-        if (timespan < params.targetTimespan / 4)
-            timespan = params.targetTimespan / 4;
-        if (timespan > params.targetTimespan * 4)
-            timespan = params.targetTimespan * 4;
+        final int targetTimespan = params.getTargetTimespan();
+        if (timespan < targetTimespan / 4)
+            timespan = targetTimespan / 4;
+        if (timespan > targetTimespan * 4)
+            timespan = targetTimespan * 4;
 
         BigInteger newDifficulty = Utils.decodeCompactBits(prev.getDifficultyTarget());
         newDifficulty = newDifficulty.multiply(BigInteger.valueOf(timespan));
-        newDifficulty = newDifficulty.divide(BigInteger.valueOf(params.targetTimespan));
+        newDifficulty = newDifficulty.divide(BigInteger.valueOf(targetTimespan));
 
-        if (newDifficulty.compareTo(params.proofOfWorkLimit) > 0) {
+        if (newDifficulty.compareTo(params.getProofOfWorkLimit()) > 0) {
             log.info("Difficulty hit proof of work limit: {}", newDifficulty.toString(16));
-            newDifficulty = params.proofOfWorkLimit;
+            newDifficulty = params.getProofOfWorkLimit();
         }
 
         int accuracyBytes = (int) (nextBlock.getDifficultyTarget() >>> 24) - 3;
@@ -789,9 +798,9 @@ public abstract class AbstractBlockChain {
             // Walk backwards until we find a block that doesn't have the easiest proof of work, then check
             // that difficulty is equal to that one.
             StoredBlock cursor = storedPrev;
-            while (!cursor.getHeader().equals(params.genesisBlock) &&
-                   cursor.getHeight() % params.interval != 0 &&
-                   cursor.getHeader().getDifficultyTargetAsInteger().equals(params.proofOfWorkLimit))
+            while (!cursor.getHeader().equals(params.getGenesisBlock()) &&
+                   cursor.getHeight() % params.getInterval() != 0 &&
+                   cursor.getHeader().getDifficultyTargetAsInteger().equals(params.getProofOfWorkLimit()))
                 cursor = cursor.getPrev(blockStore);
             BigInteger cursorDifficulty = cursor.getHeader().getDifficultyTargetAsInteger();
             BigInteger newDifficulty = next.getDifficultyTargetAsInteger();
@@ -878,5 +887,23 @@ public abstract class AbstractBlockChain {
             long estimated = (headTime * 1000) + (1000L * 60L * 10L * offset);
             return new Date(estimated);
         }
+    }
+
+    /**
+     * Returns a future that completes when the block chain has reached the given height. Yields the
+     * {@link StoredBlock} of the block that reaches that height first. The future completes on a peer thread.
+     */
+    public ListenableFuture<StoredBlock> getHeightFuture(final int height) {
+        final SettableFuture<StoredBlock> result = SettableFuture.create();
+        addListener(new AbstractBlockChainListener() {
+            @Override
+            public void notifyNewBestBlock(StoredBlock block) throws VerificationException {
+                if (block.getHeight() >= height) {
+                    removeListener(this);
+                    result.set(block);
+                }
+            }
+        });
+        return result;
     }
 }

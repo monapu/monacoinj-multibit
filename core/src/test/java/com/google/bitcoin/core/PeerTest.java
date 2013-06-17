@@ -210,7 +210,7 @@ public class PeerTest extends TestWithNetworkConnections {
         GetBlocksMessage getblocks = (GetBlocksMessage)outbound();
         List<Sha256Hash> expectedLocator = new ArrayList<Sha256Hash>();
         expectedLocator.add(b1.getHash());
-        expectedLocator.add(unitTestParams.genesisBlock.getHash());
+        expectedLocator.add(unitTestParams.getGenesisBlock().getHash());
         
         assertEquals(getblocks.getLocator(), expectedLocator);
         assertEquals(getblocks.getStopHash(), b3.getHash());
@@ -366,7 +366,7 @@ public class PeerTest extends TestWithNetworkConnections {
         List<Sha256Hash> expectedLocator = new ArrayList<Sha256Hash>();
         expectedLocator.add(b2.getHash());
         expectedLocator.add(b1.getHash());
-        expectedLocator.add(unitTestParams.genesisBlock.getHash());
+        expectedLocator.add(unitTestParams.getGenesisBlock().getHash());
 
         GetBlocksMessage message = (GetBlocksMessage) event.getValue().getMessage();
         assertEquals(message.getLocator(), expectedLocator);
@@ -420,7 +420,7 @@ public class PeerTest extends TestWithNetworkConnections {
         GetHeadersMessage getheaders = (GetHeadersMessage) outbound();
         List<Sha256Hash> expectedLocator = new ArrayList<Sha256Hash>();
         expectedLocator.add(b1.getHash());
-        expectedLocator.add(unitTestParams.genesisBlock.getHash());
+        expectedLocator.add(unitTestParams.getGenesisBlock().getHash());
         assertEquals(getheaders.getLocator(), expectedLocator);
         assertEquals(getheaders.getStopHash(), Sha256Hash.ZERO_HASH);
         // Now send all the headers.
@@ -430,7 +430,7 @@ public class PeerTest extends TestWithNetworkConnections {
         expectedLocator.clear();
         expectedLocator.add(b2.getHash());
         expectedLocator.add(b1.getHash());
-        expectedLocator.add(unitTestParams.genesisBlock.getHash());
+        expectedLocator.add(unitTestParams.getGenesisBlock().getHash());
         inbound(peer, headers);
         GetBlocksMessage getblocks = (GetBlocksMessage) outbound();
         assertEquals(expectedLocator, getblocks.getLocator());
@@ -702,6 +702,7 @@ public class PeerTest extends TestWithNetworkConnections {
         // Add a fake input to t3 that goes nowhere.
         Sha256Hash t3 = Sha256Hash.create("abc".getBytes(Charset.forName("UTF-8")));
         t2.addInput(new TransactionInput(unitTestParams, t2, new byte[]{}, new TransactionOutPoint(unitTestParams, 0, t3)));
+        t2.getInput(0).setSequenceNumber(0xDEADBEEF);
         t2.addOutput(Utils.toNanoCoins(1, 0), new ECKey());
         Transaction t1 = new Transaction(unitTestParams);
         t1.addInput(t2.getOutput(0));
@@ -786,9 +787,12 @@ public class PeerTest extends TestWithNetworkConnections {
         connect();
         Transaction t1 = new Transaction(unitTestParams);
         t1.addInput(new TransactionInput(unitTestParams, t1, new byte[]{}));
-        t1.addOutput(Utils.toNanoCoins(1, 0), wallet.getChangeAddress());
-        inbound(peer, t1);
-        inbound(peer, new NotFoundMessage(unitTestParams, Lists.newArrayList(new InventoryItem(InventoryItem.Type.Transaction, t1.getInput(0).getHash()))));
+        t1.addOutput(Utils.toNanoCoins(1, 0), new ECKey().toAddress(unitTestParams));
+        Transaction t2 = new Transaction(unitTestParams);
+        t2.addInput(t1.getOutput(0));
+        t2.addOutput(Utils.toNanoCoins(1, 0), wallet.getChangeAddress());
+        inbound(peer, t2);
+        inbound(peer, new NotFoundMessage(unitTestParams, Lists.newArrayList(new InventoryItem(InventoryItem.Type.Transaction, t2.getInput(0).getHash()))));
         assertTrue(throwables[0] instanceof NullPointerException);
     }
 

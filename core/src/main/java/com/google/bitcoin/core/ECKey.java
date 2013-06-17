@@ -16,6 +16,7 @@
 
 package com.google.bitcoin.core;
 
+import org.bitcoin.NativeSecp256k1;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.google.common.base.Preconditions;
@@ -43,6 +44,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.Serializable;
 import java.math.BigInteger;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.nio.charset.Charset;
 import java.security.SecureRandom;
 import java.security.SignatureException;
@@ -395,6 +398,34 @@ public class ECKey implements Serializable {
     }
 
     /**
+     * <p>xVerifies the given ECDSA signature against the message bytes using the public key bytes.</p>
+     * 
+     * <p>When using native ECDSA verification, data must be 32 bytes, and no element may be
+     * larger than 520 bytes.</p>
+     *
+     * @param data      Hash of the data to verify.
+     * @param signature ASN.1 encoded signature.
+     * @param pub       The public key bytes to use.
+     */
+    public static boolean verify(byte[] data, ECDSASignature signature, byte[] pub) {
+        if (NativeSecp256k1.enabled)
+            return NativeSecp256k1.verify(data, signature.encodeToDER(), pub);
+
+        ECDSASigner signer = new ECDSASigner();
+        ECPublicKeyParameters params = new ECPublicKeyParameters(ecParams.getCurve().decodePoint(pub), ecParams);
+        signer.init(false, params);
+        try {
+            return signer.verifySignature(data, signature.r, signature.s);
+        } catch (NullPointerException e) {
+            // Bouncy Castle contains a bug that can cause NPEs given specially crafted signatures. Those signatures
+            // are inherently invalid/attack sigs so we just fail them here rather than crash the thread.
+            log.error("Caught NPE inside bouncy castle");
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    /**
      * Verifies the given ASN.1 encoded ECDSA signature against a hash using the public key.
      *
      * @param data      Hash of the data to verify.
@@ -402,27 +433,24 @@ public class ECKey implements Serializable {
      * @param pub       The public key bytes to use.
      */
     public static boolean verify(byte[] data, byte[] signature, byte[] pub) {
-        ECDSASigner signer = new ECDSASigner();
-        ECPublicKeyParameters params = new ECPublicKeyParameters(ecParams.getCurve().decodePoint(pub), ecParams);
-        signer.init(false, params);
+        if (NativeSecp256k1.enabled)
+            return NativeSecp256k1.verify(data, signature, pub);
+        
         try {
             ASN1InputStream decoder = new ASN1InputStream(signature);
             DLSequence seq = (DLSequence) decoder.readObject();
-            DERInteger r = (DERInteger) seq.getObjectAt(0);
-            DERInteger s = (DERInteger) seq.getObjectAt(1);
+            DERInteger r, s;
+            try {
+                r = (DERInteger) seq.getObjectAt(0);
+                s = (DERInteger) seq.getObjectAt(1);
+            } catch (ClassCastException e) {
+                return false; // An invalid signature can cause this
+            }
             decoder.close();
             // OpenSSL deviates from the DER spec by interpreting these values as unsigned, though they should not be
             // Thus, we always use the positive versions.
             // See: http://r6.ca/blog/20111119T211504Z.html
-            try {
-                return signer.verifySignature(data, r.getPositiveValue(), s.getPositiveValue());
-            } catch (NullPointerException e) {
-                // Bouncy Castle contains a bug that can cause NPEs given specially crafted signatures. Those signatures
-                // are inherently invalid/attack sigs so we just fail them here rather than crash the thread.
-                log.error("Caught NPE inside bouncy castle");
-                e.printStackTrace();
-                return false;
-            }
+            return verify(data, new ECDSASignature(r.getPositiveValue(), s.getPositiveValue()), pub);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -435,7 +463,14 @@ public class ECKey implements Serializable {
      * @param signature ASN.1 encoded signature.
      */
     public boolean verify(byte[] data, byte[] signature) {
-        return ECKey.verify(data, signature, pub);
+        return ECKey.verify(data, signature, getPubKey());
+    }
+
+    /**
+     * Verifies the given R/S pair (signature) against a hash using the public key.
+     */
+    public boolean verify(Sha256Hash sigHash, ECDSASignature signature) {
+        return ECKey.verify(sigHash.getBytes(), signature, getPubKey());
     }
 
     private static BigInteger extractPrivateKeyFromASN1(byte[] asn1privkey) {

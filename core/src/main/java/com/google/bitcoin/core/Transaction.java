@@ -17,6 +17,9 @@
 package com.google.bitcoin.core;
 
 import com.google.bitcoin.core.TransactionConfidence.ConfidenceType;
+import com.google.bitcoin.script.Script;
+import com.google.bitcoin.script.ScriptBuilder;
+import com.google.bitcoin.script.ScriptOpCodes;
 import com.google.common.base.Preconditions;
 import com.google.bitcoin.IsMultiBitClass;
 import org.slf4j.Logger;
@@ -55,6 +58,15 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
     /** How many bytes a transaction can be before it won't be relayed anymore. */
     public static final int MAX_STANDARD_TX_SIZE = 100 * 1024;
 
+    /** If fee is lower than this value (in satoshis), a default reference client will treat it as if there were no fee */
+    public static final BigInteger REFERENCE_DEFAULT_MIN_TX_FEE = BigInteger.valueOf(10000);
+
+    /**
+     * Any standard (ie pay-to-address) output smaller than this value (in satoshis) will most likely be rejected by the network.
+     * This is calculated by assuming a standard output will be 34 bytes, and then using the formula used in
+     * {@link TransactionOutput#getMinNonDustValue(BigInteger)}.
+     */
+    public static final BigInteger MIN_NONDUST_OUTPUT = BigInteger.valueOf(5461);
 
     // These are serialized in both bitcoin and java serialization.
     private long version;
@@ -236,7 +248,7 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
      * @return true if this transaction hasn't been seen in any block yet.
      */
     public boolean isPending() {
-        return getConfidence().getConfidenceType() == TransactionConfidence.ConfidenceType.NOT_SEEN_IN_CHAIN;
+        return getConfidence().getConfidenceType() == TransactionConfidence.ConfidenceType.PENDING;
     }
 
     /**
@@ -264,20 +276,14 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
             // This can cause event listeners on TransactionConfidence to run. After these lines complete, the wallets
             // state may have changed!
             TransactionConfidence transactionConfidence = getConfidence();
-            transactionConfidence.setAppearedAtChainHeight(block.getHeight());
-
-            // Reset the confidence block depth.
-            transactionConfidence.setDepthInBlocks(1);
-
             // Reset the work done.
             try {
                 transactionConfidence.setWorkDone(block.getHeader().getWork());
             } catch (VerificationException e) {
                 throw new RuntimeException(e);  // Cannot happen.
             }
-
-            // The transaction is now on the best chain.
-            transactionConfidence.setConfidenceType(ConfidenceType.BUILDING);
+            // This sets type to BUILDING and depth to one.
+            transactionConfidence.setAppearedAtChainHeight(block.getHeight());
         }
     }
 
@@ -286,14 +292,6 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
             appearsInHashes = new HashSet<Sha256Hash>();
         }
         appearsInHashes.add(blockHash);
-    }
-
-    /** Called by the wallet once a re-org means we don't appear in the best chain anymore. */
-    void notifyNotOnBestChain() {
-        TransactionConfidence transactionConfidence = getConfidence();
-        transactionConfidence.setConfidenceType(TransactionConfidence.ConfidenceType.NOT_IN_BEST_CHAIN);
-        transactionConfidence.setDepthInBlocks(0);
-        transactionConfidence.setWorkDone(BigInteger.ZERO);
     }
 
     /**
@@ -570,7 +568,7 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
         // Basic info about the tx.
         StringBuffer s = new StringBuffer();
         s.append(String.format("  %s: %s%n", getHashAsString(), getConfidence()));
-        if (lockTime > 0) {
+        if (isTimeLocked()) {
             String time;
             if (lockTime < LOCKTIME_THRESHOLD) {
                 time = "block " + lockTime;
@@ -597,7 +595,8 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
                 script = "???";
                 script2 = "???";
             }
-            return "     == COINBASE TXN (scriptSig " + script + ")  (scriptPubKey " + script2 + ")\n";
+            s.append("     == COINBASE TXN (scriptSig " + script + ")  (scriptPubKey " + script2 + ")\n");
+            return s.toString();
         }
         for (TransactionInput in : inputs) {
             s.append("     ");
@@ -605,12 +604,14 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
 
             try {
                 Script scriptSig = in.getScriptSig();
-                if (scriptSig.chunks.size() == 2)
-                    s.append(scriptSig.getFromAddress().toString());
-                else if (scriptSig.chunks.size() == 1)
-                    s.append("[sig:" + bytesToHexString(scriptSig.chunks.get(0).data) + "]");
-                else
-                    s.append("???");
+                if (scriptSig.getChunks().size() == 2)
+                    s.append(scriptSig.getFromAddress(params).toString());
+                else if (scriptSig.getChunks().size() == 1) {
+                    s.append("[sig:");
+                    s.append(bytesToHexString(scriptSig.getChunks().get(0).data));
+                    s.append("]");
+                } else
+                    s.append(scriptSig);
                 s.append(" / ");
                 s.append(in.getOutpoint().toString());
             } catch (Exception e) {
@@ -624,11 +625,13 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
             try {
                 Script scriptPubKey = out.getScriptPubKey();
                 if (scriptPubKey.isSentToAddress()) {
-                    s.append(scriptPubKey.getToAddress().toString());
+                    s.append(scriptPubKey.getToAddress(params).toString());
                 } else if (scriptPubKey.isSentToRawPubKey()) {
                     s.append("[pubkey:");
                     s.append(bytesToHexString(scriptPubKey.getPubKey()));
                     s.append("]");
+                } else {
+                    s.append(scriptPubKey);
                 }
                 s.append(" ");
                 s.append(bitcoinValueToPlainString(out.getValue()));
@@ -649,6 +652,20 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
     }
 
     /**
+     * Removes all the inputs from this transaction.
+     * Note that this also invalidates the length attribute
+     */
+    public void clearInputs() {
+        unCache();
+        for (TransactionInput input : inputs) {
+            input.setParent(null);
+        }
+        inputs.clear();
+        // You wanted to reserialize, right?
+        this.length = this.bitcoinSerialize().length;
+    }
+
+    /**
      * Adds an input to this transaction that imports value from the given output. Note that this input is NOT
      * complete and after every input is added with addInput() and every output is added with addOutput(),
      * signInputs() must be called to finalize the transaction and finish the inputs off. Otherwise it won't be
@@ -666,6 +683,20 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
         input.setParent(this);
         inputs.add(input);
         adjustLength(inputs.size(), input.length);
+    }
+
+    /**
+     * Removes all the inputs from this transaction.
+     * Note that this also invalidates the length attribute
+     */
+    public void clearOutputs() {
+        unCache();
+        for (TransactionOutput output : outputs) {
+            output.setParent(null);
+        }
+        outputs.clear();
+        // You wanted to reserialize, right?
+        this.length = this.bitcoinSerialize().length;
     }
 
     /**
@@ -694,6 +725,14 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
     }
 
     /**
+     * Creates an output that pays to the given script. The address and key forms are specialisations of this method,
+     * you won't normally need to use it unless you're doing unusual things.
+     */
+    public void addOutput(BigInteger value, Script script) {
+        addOutput(new TransactionOutput(params, this, value, script.getProgram()));
+    }
+
+    /**
      * Once a transaction has some inputs and outputs added, the signatures in the inputs can be calculated. The
      * signature is over the transaction itself, to prove the redeemer actually created that transaction,
      * so we have to do this step last.<p>
@@ -708,17 +747,16 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
     }
 
     /**
-     * Once a transaction has some inputs and outputs added, the signatures in the inputs can be calculated. The
+     * <p>Once a transaction has some inputs and outputs added, the signatures in the inputs can be calculated. The
      * signature is over the transaction itself, to prove the redeemer actually created that transaction,
-     * so we have to do this step last.<p>
-     * <p/>
-     * This method is similar to SignatureHash in script.cpp
+     * so we have to do this step last.</p>
      *
      * @param hashType This should always be set to SigHash.ALL currently. Other types are unused.
-     * @param wallet   A wallet is required to fetch the keys needed for signing.
+     * @param wallet  A wallet is required to fetch the keys needed for signing.
      * @param aesKey The AES key to use to decrypt the key before signing. Null if no decryption is required.
      */
     public synchronized void signInputs(SigHash hashType, Wallet wallet, KeyParameter aesKey) throws ScriptException {
+        // TODO: This should be a method of the TransactionInput that (possibly?) operates with a copy of this object.
         Preconditions.checkState(inputs.size() > 0);
         Preconditions.checkState(outputs.size() > 0);
 
@@ -732,10 +770,24 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
         // Note that each input may be claiming an output sent to a different key. So we have to look at the outputs
         // to figure out which key to sign with.
 
-        byte[][] signatures = new byte[inputs.size()][];
+        int[] sigHashFlags = new int[inputs.size()];
+        ECKey.ECDSASignature[] signatures = new ECKey.ECDSASignature[inputs.size()];
         ECKey[] signingKeys = new ECKey[inputs.size()];
         for (int i = 0; i < inputs.size(); i++) {
             TransactionInput input = inputs.get(i);
+            // We don't have the connected output, we assume it was signed already and move on
+            if (input.getOutpoint().getConnectedOutput() == null) {
+                log.warn("Missing connected output, assuming input {} is already signed.", i);
+                continue;
+            }
+            try {
+                // We assume if its already signed, its hopefully got a SIGHASH type that will not invalidate when
+                // we sign missing pieces (to check this would require either assuming any signatures are signing
+                // standard output types or a way to get processed signatures out of script execution)
+                input.getScriptSig().correctlySpends(this, i, input.getOutpoint().getConnectedOutput().getScriptPubKey(), true);
+                log.warn("Input {} already correctly spends output, assuming SIGHASH type used will be safe and skipping signing.", i);
+                continue;
+            } catch (ScriptException e) {}
             if (input.getScriptBytes().length != 0)
                 log.warn("Re-signing an already signed transaction! Be sure this is what you want.");
             // Find the signing key we'll need to use.
@@ -750,18 +802,10 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
             byte[] connectedPubKeyScript = input.getOutpoint().getConnectedPubKeyScript();
             Sha256Hash hash = hashTransactionForSignature(i, connectedPubKeyScript, hashType, anyoneCanPay);
 
-            // Now sign for the output so we can redeem it. We use the keypair to sign the hash,
-            // and then put the resulting signature in the script along with the public key (below).
-            try {
-                // Usually 71-73 bytes.
-                ByteArrayOutputStream bos = new UnsafeByteArrayOutputStream(73);
-                bos.write(key.sign(hash, aesKey).encodeToDER());
-                bos.write((hashType.ordinal() + 1) | (anyoneCanPay ? 0x80 : 0));
-                signatures[i] = bos.toByteArray();
-                bos.close();
-            } catch (IOException e) {
-                throw new RuntimeException(e);  // Cannot happen.
-            }
+            // Now calculate the signatures we need to prove we own this transaction and are authorized to claim the
+            // associated money.
+            signatures[i] = key.sign(hash, aesKey);
+            sigHashFlags[i] = (hashType.ordinal() + 1) | (anyoneCanPay ? 0x80 : 0);
         }
 
         // Now we have calculated each signature, go through and create the scripts. Reminder: the script consists:
@@ -770,13 +814,14 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
         //    to the address and then checks the signature.
         // 2) For pay-to-key outputs: just a signature.
         for (int i = 0; i < inputs.size(); i++) {
+            if (signatures[i] == null)
+                continue;
             TransactionInput input = inputs.get(i);
-            ECKey key = signingKeys[i];
             Script scriptPubKey = input.getOutpoint().getConnectedOutput().getScriptPubKey();
             if (scriptPubKey.isSentToAddress()) {
-                input.setScriptBytes(Script.createInputScript(signatures[i], key.getPubKey()));
+                input.setScriptSig(ScriptBuilder.createInputScript(signatures[i], signingKeys[i], sigHashFlags[i]));
             } else if (scriptPubKey.isSentToRawPubKey()) {
-                input.setScriptBytes(Script.createInputScript(signatures[i]));
+                input.setScriptSig(ScriptBuilder.createInputScript(signatures[i], sigHashFlags[i]));
             } else {
                 // Should be unreachable - if we don't recognize the type of script we're trying to sign for, we should
                 // have failed above when fetching the key to sign with.
@@ -788,29 +833,46 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
     }
 
     /**
-     * Calculates a signature hash, that is, a hash of a simplified form of the transaction. How exactly the transaction
-     * is simplified is specified by the type and anyoneCanPay parameters.<p>
+     * <p>Calculates a signature hash, that is, a hash of a simplified form of the transaction. How exactly the transaction
+     * is simplified is specified by the type and anyoneCanPay parameters.</p>
      *
-     * You don't normally ever need to call this yourself. It will become more useful in future as the contracts
-     * features of Bitcoin are developed.
+     * <p>You don't normally ever need to call this yourself. It will become more useful in future as the contracts
+     * features of Bitcoin are developed.</p>
      *
      * @param inputIndex input the signature is being calculated for. Tx signatures are always relative to an input.
      * @param connectedScript the bytes that should be in the given input during signing.
      * @param type Should be SigHash.ALL
      * @param anyoneCanPay should be false.
-     * @throws ScriptException if connectedScript is invalid
      */
     public synchronized Sha256Hash hashTransactionForSignature(int inputIndex, byte[] connectedScript,
-                                                               SigHash type, boolean anyoneCanPay) throws ScriptException {
+                                                               SigHash type, boolean anyoneCanPay) {
         return hashTransactionForSignature(inputIndex, connectedScript, (byte)((type.ordinal() + 1) | (anyoneCanPay ? 0x80 : 0x00)));
     }
-    
+
+    /**
+     * <p>Calculates a signature hash, that is, a hash of a simplified form of the transaction. How exactly the transaction
+     * is simplified is specified by the type and anyoneCanPay parameters.</p>
+     *
+     * <p>You don't normally ever need to call this yourself. It will become more useful in future as the contracts
+     * features of Bitcoin are developed.</p>
+     *
+     * @param inputIndex input the signature is being calculated for. Tx signatures are always relative to an input.
+     * @param connectedScript the script that should be in the given input during signing.
+     * @param type Should be SigHash.ALL
+     * @param anyoneCanPay should be false.
+     */
+    public synchronized Sha256Hash hashTransactionForSignature(int inputIndex, Script connectedScript,
+                                                               SigHash type, boolean anyoneCanPay) {
+        return hashTransactionForSignature(inputIndex, connectedScript.getProgram(),
+                (byte)((type.ordinal() + 1) | (anyoneCanPay ? 0x80 : 0x00)));
+    }
+
     /**
      * This is required for signatures which use a sigHashType which cannot be represented using SigHash and anyoneCanPay
      * See transaction c99c49da4c38af669dea436d3e73780dfdb6c1ecf9958baa52960e8baee30e73, which has sigHashType 0
      */
-    synchronized Sha256Hash hashTransactionForSignature(int inputIndex, byte[] connectedScript,
-            byte sigHashType) throws ScriptException {
+    public synchronized Sha256Hash hashTransactionForSignature(int inputIndex, byte[] connectedScript,
+            byte sigHashType) {
         // TODO: This whole separate method should be un-necessary if we fix how we deserialize sighash flags.
 
         // The SIGHASH flags are used in the design of contracts, please see this page for a further understanding of
@@ -839,7 +901,7 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
             // OP_CODESEPARATOR instruction having no purpose as it was only meant to be used internally, not actually
             // ever put into scripts. Deleting OP_CODESEPARATOR is a step that should never be required but if we don't
             // do it, we could split off the main chain.
-            connectedScript = Script.removeAllInstancesOfOp(connectedScript, Script.OP_CODESEPARATOR);
+            connectedScript = Script.removeAllInstancesOfOp(connectedScript, ScriptOpCodes.OP_CODESEPARATOR);
             
             // Set the input to the script of its output. Satoshi does this but the step has no obvious purpose as
             // the signature covers the hash of the prevout transaction which obviously includes the output script
@@ -930,7 +992,10 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
 
 
     /**
-     * @return the lockTime
+     * Transactions can have an associated lock time, specified either as a block height or in seconds since the
+     * UNIX epoch. A transaction is not allowed to be confirmed by miners until the lock time is reached, and
+     * since Bitcoin 0.8+ a transaction that did not end its lock period (non final) is considered to be non
+     * standard and won't be relayed or included in the memory pool either.
      */
     public long getLockTime() {
         maybeParse();
@@ -938,10 +1003,14 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
     }
 
     /**
-     * @param lockTime the lockTime to set
+     * Transactions can have an associated lock time, specified either as a block height or in seconds since the
+     * UNIX epoch. A transaction is not allowed to be confirmed by miners until the lock time is reached, and
+     * since Bitcoin 0.8+ a transaction that did not end its lock period (non final) is considered to be non
+     * standard and won't be relayed or included in the memory pool either.
      */
     public void setLockTime(long lockTime) {
         unCache();
+        // TODO: Consider checking that at least one input has a non-final sequence number.
         this.lockTime = lockTime;
     }
 
@@ -953,17 +1022,13 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
         return version;
     }
 
-    /**
-     * @return a read-only list of the inputs of this transaction.
-     */
+    /** Returns an unmodifiable view of all inputs. */
     public List<TransactionInput> getInputs() {
         maybeParse();
         return Collections.unmodifiableList(inputs);
     }
 
-    /**
-     * @return a read-only list of the outputs of this transaction.
-     */
+    /** Returns an unmodifiable view of all outputs. */
     public List<TransactionOutput> getOutputs() {
         maybeParse();
         return Collections.unmodifiableList(outputs);
@@ -1111,6 +1176,21 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
     }
 
     /**
+     * <p>A transaction is time locked if at least one of its inputs is non-final and it has a lock time</p>
+     *
+     * <p>To check if this transaction is final at a given height and time, see {@link Transaction#isFinal(int, long)}
+     * </p>
+     */
+    public boolean isTimeLocked() {
+        if (getLockTime() == 0)
+            return false;
+        for (TransactionInput input : getInputs())
+            if (input.hasSequence())
+                return true;
+        return false;
+    }
+
+    /**
      * <p>Returns true if this transaction is considered finalized and can be placed in a block. Non-finalized
      * transactions won't be included by miners and can be replaced with newer versions using sequence numbers.
      * This is useful in certain types of <a href="http://en.bitcoin.it/wiki/Contracts">contracts</a>, such as
@@ -1120,16 +1200,12 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
      * re-activated before this functionality is useful.</p>
      */
     public boolean isFinal(int height, long blockTimeSeconds) {
-        // Time based nLockTime implemented in 0.1.6
         long time = getLockTime();
-        if (time == 0)
-            return true;
         if (time < (time < LOCKTIME_THRESHOLD ? height : blockTimeSeconds))
             return true;
-        for (TransactionInput in : inputs)
-            if (in.hasSequence())
-                return false;
-        return true;
+        if (!isTimeLocked())
+            return true;
+        return false;
     }
 
     /**

@@ -21,6 +21,7 @@ import com.google.bitcoin.core.TCPNetworkConnection;
 import com.google.bitcoin.core.VersionMessage;
 import com.google.bitcoin.discovery.DnsDiscovery;
 import com.google.bitcoin.discovery.PeerDiscoveryException;
+import com.google.bitcoin.params.MainNetParams;
 import com.google.bitcoin.utils.BriefLogFormatter;
 import com.google.common.collect.Lists;
 import com.google.common.util.concurrent.FutureCallback;
@@ -53,7 +54,7 @@ public class PrintPeers {
 
     private static void printDNS() throws PeerDiscoveryException {
         long start = System.currentTimeMillis();
-        DnsDiscovery dns = new DnsDiscovery(NetworkParameters.prodNet());
+        DnsDiscovery dns = new DnsDiscovery(MainNetParams.get());
         dnsPeers = dns.getPeers(10, TimeUnit.SECONDS);
         printPeers(dnsPeers);
         printElapsed(start);
@@ -69,14 +70,14 @@ public class PrintPeers {
         for (InetSocketAddress peer : dnsPeers) addrs.add(peer.getAddress());
         System.out.println("Scanning " + addrs.size() + " peers:");
 
-        final NetworkParameters params = NetworkParameters.prodNet();
+        final NetworkParameters params = MainNetParams.get();
         final Object lock = new Object();
         final long[] bestHeight = new long[1];
 
         List<ListenableFuture<TCPNetworkConnection>> futures = Lists.newArrayList();
         for (final InetAddress addr : addrs) {
             final ListenableFuture<TCPNetworkConnection> future =
-                    TCPNetworkConnection.connectTo(params, new InetSocketAddress(addr, params.port), 1000 /* timeout */);
+                    TCPNetworkConnection.connectTo(params, new InetSocketAddress(addr, params.getPort()), 1000 /* timeout */);
             futures.add(future);
             // Once the connection has completed version handshaking ...
             Futures.addCallback(future, new FutureCallback<TCPNetworkConnection>() {
