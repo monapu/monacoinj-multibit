@@ -16,6 +16,7 @@
 
 package org.multibit.store;
 
+import com.google.bitcoin.core.Wallet;
 import com.google.bitcoin.core.WalletExtension;
 
 /**
@@ -41,7 +42,7 @@ public class MultiBitWalletExtension implements WalletExtension {
     }
 
     @Override
-    public void deserializeWalletExtension(byte[] data) {
+    public void deserializeWalletExtension(Wallet containingWallet, byte[] data) {
         // TODO Auto-generated method stub
     }
 }

@@ -66,7 +66,7 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
      * This is calculated by assuming a standard output will be 34 bytes, and then using the formula used in
      * {@link TransactionOutput#getMinNonDustValue(BigInteger)}.
      */
-    public static final BigInteger MIN_NONDUST_OUTPUT = BigInteger.valueOf(5461);
+    public static final BigInteger MIN_NONDUST_OUTPUT = BigInteger.valueOf(5460);
 
     // These are serialized in both bitcoin and java serialization.
     private long version;
@@ -417,6 +417,7 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
         NONE,        // 2
         SINGLE,      // 3
     }
+    public static final byte SIGHASH_ANYONECANPAY_VALUE = (byte) 0x80;
 
     @Override
     protected void unCache() {
@@ -669,20 +670,21 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
      * Adds an input to this transaction that imports value from the given output. Note that this input is NOT
      * complete and after every input is added with addInput() and every output is added with addOutput(),
      * signInputs() must be called to finalize the transaction and finish the inputs off. Otherwise it won't be
-     * accepted by the network.
+     * accepted by the network. Returns the newly created input.
      */
-    public void addInput(TransactionOutput from) {
-        addInput(new TransactionInput(params, this, from));
+    public TransactionInput addInput(TransactionOutput from) {
+        return addInput(new TransactionInput(params, this, from));
     }
 
     /**
-     * Adds an input directly, with no checking that it's valid.
+     * Adds an input directly, with no checking that it's valid. Returns the new input.
      */
-    public void addInput(TransactionInput input) {
+    public TransactionInput addInput(TransactionInput input) {
         unCache();
         input.setParent(this);
         inputs.add(input);
         adjustLength(inputs.size(), input.length);
+        return input;
     }
 
     /**
@@ -700,36 +702,37 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
     }
 
     /**
-     * Adds the given output to this transaction. The output must be completely initialized.
+     * Adds the given output to this transaction. The output must be completely initialized. Returns the given output.
      */
-    public void addOutput(TransactionOutput to) {
+    public TransactionOutput addOutput(TransactionOutput to) {
         unCache();
         to.setParent(this);
         outputs.add(to);
         adjustLength(outputs.size(), to.length);
+        return to;
     }
 
     /**
-     * Creates an output based on the given address and value, adds it to this transaction.
+     * Creates an output based on the given address and value, adds it to this transaction, and returns the new output.
      */
-    public void addOutput(BigInteger value, Address address) {
-        addOutput(new TransactionOutput(params, this, value, address));
+    public TransactionOutput addOutput(BigInteger value, Address address) {
+        return addOutput(new TransactionOutput(params, this, value, address));
     }
 
     /**
-     * Creates an output that pays to the given pubkey directly (no address) with the given value, and adds it to this
-     * transaction.
+     * Creates an output that pays to the given pubkey directly (no address) with the given value, adds it to this
+     * transaction, and returns the new output.
      */
-    public void addOutput(BigInteger value, ECKey pubkey) {
-        addOutput(new TransactionOutput(params, this, value, pubkey));
+    public TransactionOutput addOutput(BigInteger value, ECKey pubkey) {
+        return addOutput(new TransactionOutput(params, this, value, pubkey));
     }
 
     /**
      * Creates an output that pays to the given script. The address and key forms are specialisations of this method,
      * you won't normally need to use it unless you're doing unusual things.
      */
-    public void addOutput(BigInteger value, Script script) {
-        addOutput(new TransactionOutput(params, this, value, script.getProgram()));
+    public TransactionOutput addOutput(BigInteger value, Script script) {
+        return addOutput(new TransactionOutput(params, this, value, script.getProgram()));
     }
 
     /**
@@ -805,7 +808,7 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
             // Now calculate the signatures we need to prove we own this transaction and are authorized to claim the
             // associated money.
             signatures[i] = key.sign(hash, aesKey);
-            sigHashFlags[i] = (hashType.ordinal() + 1) | (anyoneCanPay ? 0x80 : 0);
+            sigHashFlags[i] = (hashType.ordinal() + 1) | (anyoneCanPay ? SIGHASH_ANYONECANPAY_VALUE : 0);
         }
 
         // Now we have calculated each signature, go through and create the scripts. Reminder: the script consists:
@@ -846,7 +849,7 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
      */
     public synchronized Sha256Hash hashTransactionForSignature(int inputIndex, byte[] connectedScript,
                                                                SigHash type, boolean anyoneCanPay) {
-        return hashTransactionForSignature(inputIndex, connectedScript, (byte)((type.ordinal() + 1) | (anyoneCanPay ? 0x80 : 0x00)));
+        return hashTransactionForSignature(inputIndex, connectedScript, (byte)((type.ordinal() + 1) | (anyoneCanPay ? SIGHASH_ANYONECANPAY_VALUE : 0x00)));
     }
 
     /**
@@ -864,7 +867,7 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
     public synchronized Sha256Hash hashTransactionForSignature(int inputIndex, Script connectedScript,
                                                                SigHash type, boolean anyoneCanPay) {
         return hashTransactionForSignature(inputIndex, connectedScript.getProgram(),
-                (byte)((type.ordinal() + 1) | (anyoneCanPay ? 0x80 : 0x00)));
+                (byte)((type.ordinal() + 1) | (anyoneCanPay ? SIGHASH_ANYONECANPAY_VALUE : 0x00)));
     }
 
     /**
@@ -949,7 +952,7 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
             }
             
             ArrayList<TransactionInput> inputs = this.inputs;
-            if ((sigHashType & 0x80) == 0x80) {
+            if ((sigHashType & SIGHASH_ANYONECANPAY_VALUE) == SIGHASH_ANYONECANPAY_VALUE) {
                 // SIGHASH_ANYONECANPAY means the signature in the input is not broken by changes/additions/removals
                 // of other inputs. For example, this is useful for building assurance contracts.
                 this.inputs = new ArrayList<TransactionInput>();

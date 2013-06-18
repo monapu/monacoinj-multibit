@@ -121,8 +121,7 @@ public class TransactionOutput extends ChildMessage implements Serializable, IsM
         return scriptPubKey;
     }
 
-    @Override
-    protected void parseLite() {
+    protected void parseLite() throws ProtocolException {
         // TODO: There is no reason to use BigInteger for values, they are always smaller than 21 million * COIN
         // The only reason to use BigInteger would be to properly read values from the reference implementation, however
         // the reference implementation uses signed 64-bit integers for its values as well (though it probably shouldn't)
@@ -182,9 +181,9 @@ public class TransactionOutput extends ChildMessage implements Serializable, IsM
      *                         If you want a safe default, use {@link Transaction#REFERENCE_DEFAULT_MIN_TX_FEE}*3
      */
     public BigInteger getMinNonDustValue(BigInteger feePerKbRequired) {
-        // Note we skip the *3 as that should be considered in the parameter and we add one to account for loss of precision
-        // (1/1000 chance we require too much fee, 999/1000 chance we get the exact right value...)
-        return feePerKbRequired.multiply(BigInteger.valueOf(this.bitcoinSerialize().length + 148)).divide(BigInteger.valueOf(1000)).add(BigInteger.ONE);
+        // Note we skip the *3 as that should be considered in the parameter
+        BigInteger[] nonDustAndRemainder = feePerKbRequired.multiply(BigInteger.valueOf(this.bitcoinSerialize().length + 148)).divideAndRemainder(BigInteger.valueOf(1000));
+        return nonDustAndRemainder[1].equals(BigInteger.ZERO) ? nonDustAndRemainder[0] : nonDustAndRemainder[0].add(BigInteger.ONE);
     }
 
     /**

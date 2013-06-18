@@ -16,18 +16,7 @@
 
 package com.google.bitcoin.store;
 
-import com.google.bitcoin.core.*;
-import com.google.bitcoin.core.TransactionConfidence.ConfidenceType;
-import com.google.bitcoin.crypto.EncryptedPrivateKey;
-import com.google.bitcoin.crypto.KeyCrypter;
-import com.google.bitcoin.crypto.KeyCrypterScrypt;
-import com.google.common.base.Preconditions;
-import com.google.protobuf.ByteString;
-import com.google.protobuf.TextFormat;
-import org.bitcoinj.wallet.Protos;
-import org.bitcoinj.wallet.Protos.Wallet.EncryptionType;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import static com.google.common.base.Preconditions.checkNotNull;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -35,17 +24,13 @@ import java.io.OutputStream;
 import java.math.BigInteger;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
-import java.util.*;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.ListIterator;
+import java.util.Map;
 
 import org.bitcoinj.wallet.Protos;
 import org.bitcoinj.wallet.Protos.Wallet.EncryptionType;
-import org.bitcoinj.wallet.Protos.Key.Type;
-
-import com.google.bitcoin.crypto.EncryptedPrivateKey;
-import com.google.bitcoin.crypto.KeyCrypter;
-import com.google.bitcoin.crypto.KeyCrypterException;
-import com.google.bitcoin.crypto.KeyCrypterScrypt;
-
 import org.multibit.store.MultiBitWalletVersion;
 import org.multibit.store.WalletVersionException;
 import org.slf4j.Logger;
@@ -62,12 +47,14 @@ import com.google.bitcoin.core.TransactionInput;
 import com.google.bitcoin.core.TransactionOutPoint;
 import com.google.bitcoin.core.TransactionOutput;
 import com.google.bitcoin.core.Wallet;
+import com.google.bitcoin.core.WalletExtension;
 import com.google.bitcoin.core.WalletTransaction;
+import com.google.bitcoin.crypto.EncryptedPrivateKey;
+import com.google.bitcoin.crypto.KeyCrypter;
+import com.google.bitcoin.crypto.KeyCrypterScrypt;
 import com.google.common.base.Preconditions;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.TextFormat;
-
-import static com.google.common.base.Preconditions.checkNotNull;
 
 /**
  * Serialize and de-serialize a wallet to a byte stream containing a
@@ -335,16 +322,8 @@ public class WalletProtobufSerializer {
 
         // System.out.println(TextFormat.printToString(walletProto));
 
-        // Read the scrypt parameters that specify how encryption and decryption is performed.
-        // TODO: Why is the key crypter special? This should just be added to the wallet after construction as well.
-        KeyCrypter keyCrypter = null;
-        if (walletProto.hasEncryptionParameters()) {
-            Protos.ScryptParameters encryptionParameters = walletProto.getEncryptionParameters();
-            keyCrypter = new KeyCrypterScrypt(encryptionParameters);
-        }
-
         NetworkParameters params = NetworkParameters.fromID(walletProto.getNetworkIdentifier());
-        Wallet wallet = new Wallet(params, keyCrypter);
+        Wallet wallet = new Wallet(params);
         readWallet(walletProto, wallet);
         return wallet;
     }
@@ -359,6 +338,12 @@ public class WalletProtobufSerializer {
      */
     public void readWallet(Protos.Wallet walletProto, Wallet wallet) throws IOException {
         // TODO: This method should throw more specific exception types than IllegalArgumentException.
+        // Read the scrypt parameters that specify how encryption and decryption is performed.
+        if (walletProto.hasEncryptionParameters()) {
+            Protos.ScryptParameters encryptionParameters = walletProto.getEncryptionParameters();
+            wallet.setKeyCrypter(new KeyCrypterScrypt(encryptionParameters));
+        }
+
         if (walletProto.hasDescription()) {
             wallet.setDescription(walletProto.getDescription());
         }
@@ -449,7 +434,12 @@ public class WalletProtobufSerializer {
                 }
             } else {
                 log.info("Loading wallet extension {}", id);
-                extension.deserializeWalletExtension(extProto.getData().toByteArray());
+                try {
+                    extension.deserializeWalletExtension(wallet, extProto.getData().toByteArray());
+                } catch (Exception e) {
+                    if (extProto.getMandatory())
+                        throw new IllegalArgumentException("Unknown mandatory extension in wallet: " + id);
+                }
             }
         }
     }
@@ -494,7 +484,7 @@ public class WalletProtobufSerializer {
         }
 
         if (txProto.hasLockTime()) {
-            tx.setLockTime(txProto.getLockTime());
+            tx.setLockTime(0xffffffffL & txProto.getLockTime());
         }
 
         // Transaction should now be complete.

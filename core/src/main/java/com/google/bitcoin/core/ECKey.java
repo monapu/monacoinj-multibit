@@ -16,36 +16,29 @@
 
 package com.google.bitcoin.core;
 
+import com.google.bitcoin.crypto.EncryptedPrivateKey;
+import com.google.bitcoin.crypto.KeyCrypter;
+import com.google.bitcoin.crypto.KeyCrypterException;
+import com.google.common.base.Preconditions;
 import org.bitcoin.NativeSecp256k1;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import com.google.common.base.Preconditions;
 import org.spongycastle.asn1.*;
 import org.spongycastle.asn1.sec.SECNamedCurves;
 import org.spongycastle.asn1.x9.X9ECParameters;
 import org.spongycastle.crypto.AsymmetricCipherKeyPair;
 import org.spongycastle.crypto.generators.ECKeyPairGenerator;
-import org.spongycastle.crypto.params.ECDomainParameters;
-import org.spongycastle.crypto.params.ECKeyGenerationParameters;
-import org.spongycastle.crypto.params.ECPrivateKeyParameters;
-import org.spongycastle.crypto.params.ECPublicKeyParameters;
-import org.spongycastle.crypto.params.KeyParameter;
+import org.spongycastle.crypto.params.*;
 import org.spongycastle.crypto.signers.ECDSASigner;
 import org.spongycastle.math.ec.ECCurve;
 import org.spongycastle.math.ec.ECFieldElement;
 import org.spongycastle.math.ec.ECPoint;
 import org.spongycastle.util.encoders.Base64;
 
-import com.google.bitcoin.crypto.EncryptedPrivateKey;
-import com.google.bitcoin.crypto.KeyCrypter;
-import com.google.bitcoin.crypto.KeyCrypterException;
-
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.Serializable;
 import java.math.BigInteger;
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 import java.nio.charset.Charset;
 import java.security.SecureRandom;
 import java.security.SignatureException;
@@ -471,6 +464,65 @@ public class ECKey implements Serializable {
      */
     public boolean verify(Sha256Hash sigHash, ECDSASignature signature) {
         return ECKey.verify(sigHash.getBytes(), signature, getPubKey());
+    }
+
+    /**
+     * Returns true if the given signature is in canonical form (ie will be accepted as standard by the reference client)
+     */
+    public static boolean isSignatureCanonical(byte[] signature) {
+        // See reference client's IsCanonicalSignature, https://bitcointalk.org/index.php?topic=8392.msg127623#msg127623
+        // A canonical signature exists of: <30> <total len> <02> <len R> <R> <02> <len S> <S> <hashtype>
+        // Where R and S are not negative (their first byte has its highest bit not set), and not
+        // excessively padded (do not start with a 0 byte, unless an otherwise negative number follows,
+        // in which case a single 0 byte is necessary and even required).
+        if (signature.length < 9 || signature.length > 73)
+            return false;
+
+        int hashType = signature[signature.length-1] & ((int)(~Transaction.SIGHASH_ANYONECANPAY_VALUE));
+        if (hashType < (Transaction.SigHash.ALL.ordinal() + 1) || hashType > (Transaction.SigHash.SINGLE.ordinal() + 1))
+            return false;
+
+        //                   "wrong type"                  "wrong length marker"
+        if ((signature[0] & 0xff) != 0x30 || (signature[1] & 0xff) != signature.length-3)
+            return false;
+
+        int lenR = signature[3] & 0xff;
+        if (5 + lenR >= signature.length || lenR == 0)
+            return false;
+        int lenS = signature[5+lenR] & 0xff;
+        if (lenR + lenS + 7 != signature.length || lenS == 0)
+            return false;
+
+        //    R value type mismatch          R value negative
+        if (signature[4-2] != 0x02 || (signature[4] & 0x80) == 0x80)
+            return false;
+        if (lenR > 1 && signature[4] == 0x00 && (signature[4+1] & 0x80) != 0x80)
+            return false; // R value excessively padded
+
+        //       S value type mismatch                    S value negative
+        if (signature[6 + lenR - 2] != 0x02 || (signature[6 + lenR] & 0x80) == 0x80)
+            return false;
+        if (lenS > 1 && signature[6 + lenR] == 0x00 && (signature[6 + lenR + 1] & 0x80) != 0x80)
+            return false; // S value excessively padded
+
+        return true;
+    }
+
+    /**
+     * Returns true if the given pubkey is canonical (ie the correct length for its declared type)
+     */
+    public static boolean isPubKeyCanonical(byte[] pubkey) {
+        if (pubkey.length < 33)
+            return false;
+        if (pubkey[0] == 0x04) { // Uncompressed pubkey
+            if (pubkey.length != 65)
+                return false;
+        } else if (pubkey[0] == 0x02 || pubkey[0] == 0x03) { // Compressed pubkey
+            if (pubkey.length != 33)
+                return false;
+        } else
+            return false;
+        return true;
     }
 
     private static BigInteger extractPrivateKeyFromASN1(byte[] asn1privkey) {

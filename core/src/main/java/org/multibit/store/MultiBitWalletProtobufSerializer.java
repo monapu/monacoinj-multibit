@@ -480,7 +480,11 @@ public class MultiBitWalletProtobufSerializer extends WalletProtobufSerializer {
                 }
             } else {
                 log.info("Loading wallet extension {}", id);
-                extension.deserializeWalletExtension(extProto.getData().toByteArray());
+                try {
+                    extension.deserializeWalletExtension(wallet, extProto.getData().toByteArray());
+                } catch (Exception e) {
+                     e.printStackTrace();
+                }
             }
         }
     }

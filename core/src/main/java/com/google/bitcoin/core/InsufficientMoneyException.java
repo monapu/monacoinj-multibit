@@ -1,5 +1,5 @@
-/**
- * Copyright 2011 Google Inc.
+/*
+ * Copyright 2013 Google Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,17 +16,8 @@
 
 package com.google.bitcoin.core;
 
-@SuppressWarnings("serial")
-public class VerificationException extends Exception {
-    public VerificationException(String msg) {
-        super(msg);
-    }
-
-    public VerificationException(Exception e) {
-        super(e);
-    }
-
-    public VerificationException(String msg, Throwable t) {
-        super(msg, t);
-    }
+/**
+ * Thrown to indicate that you don't have enough money available to perform the requested operation.
+ */
+public class InsufficientMoneyException extends Exception {
 }

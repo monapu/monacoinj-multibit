@@ -36,6 +36,7 @@ public class RegTestParams extends TestNet2Params {
         port = 18444;
         acceptableAddressCodes = new int[] { 0 };
         addressHeader = 0;
+        dumpedPrivateKeyHeader = 128;
     }
 
     @Override
@@ -57,5 +58,13 @@ public class RegTestParams extends TestNet2Params {
             }
             return genesis;
         }
+    }
+
+    private static RegTestParams instance;
+    public static synchronized RegTestParams get() {
+        if (instance == null) {
+            instance = new RegTestParams();
+        }
+        return instance;
     }
 }
