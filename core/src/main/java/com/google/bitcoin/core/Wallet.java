@@ -789,6 +789,41 @@ public class Wallet implements Serializable, BlockChainListener, IsMultiBitClass
                 bitcoinValueToFriendlyString(valueDifference), tx.getHashAsString(),
                 block != null ? block.getHeader().getHash() : "(unit test)"});
 
+        // If the transaction is being replayed no need to add it to the wallet again.
+        Transaction diagnosticTx = tx;
+        if (spent.containsKey(txHash)) {
+            diagnosticTx = spent.get(txHash);
+        }
+        if (unspent.containsKey(txHash)) {
+            diagnosticTx = unspent.get(txHash);
+        }
+
+        if (dead.containsKey(txHash)) {
+            diagnosticTx = dead.get(txHash);
+        }
+
+        boolean isReplay = ((spent.containsKey(txHash) || unspent.containsKey(txHash) || dead.containsKey(txHash)) && bestChain) &&
+            !reorg && diagnosticTx.getConfidence().getConfidenceType() == ConfidenceType.BUILDING && (diagnosticTx.getConfidence().getAppearedAtChainHeight() > lastBlockSeenHeight);
+        
+        if (isReplay) {
+            log.debug("Replay diagnostic for tx = " + txHash);
+            log.debug("  spent.containsKey(txHash) = " + spent.containsKey(txHash));
+            log.debug("  unspent.containsKey(txHash) = " + unspent.containsKey(txHash));
+            log.debug("  dead.containsKey(txHash) = " + dead.containsKey(txHash));
+            log.debug("  diagnosticTx.getConfidence().getConfidenceType() = " + diagnosticTx.getConfidence().getConfidenceType());
+            if (diagnosticTx.getConfidence().getConfidenceType() == ConfidenceType.BUILDING) {
+                log.debug("  diagnosticTx.getConfidence().getAppearedAtChainHeight() = " + diagnosticTx.getConfidence().getAppearedAtChainHeight());
+            }
+            log.debug("  lastBlockSeenHeight = " + lastBlockSeenHeight);
+            log.debug("  bestChain = " + bestChain);
+            log.debug("  reorg = " + reorg);
+               
+            // We know the tx appears in the chain in the future (compared to
+            // now) and it is not a reorg so can ignore it.
+            // This happens on replay.
+            log.debug("Received a tx '" + txHash.toString() + "' which is a replay so ignoring.");
+            return;
+        }
         onWalletChangedSuppressions++;
 
         // If this transaction is already in the wallet we may need to move it into a different pool. At the very
