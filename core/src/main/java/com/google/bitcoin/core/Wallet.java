@@ -1688,6 +1688,10 @@ public class Wallet implements Serializable, BlockChainListener, IsMultiBitClass
         return result;
     }
 
+    public boolean completeTx(SendRequest req) {
+        return completeTx(req, true);
+    }
+
     /**
      * Given a spend request containing an incomplete transaction, makes it valid by adding inputs and outputs according
      * to the instructions in the request. The transaction in the request is modified by this method, as is the fee
@@ -1697,7 +1701,7 @@ public class Wallet implements Serializable, BlockChainListener, IsMultiBitClass
      * @throws IllegalArgumentException if you try and complete the same SendRequest twice.
      * @return whether or not the requested send is affordable.
      */
-    public boolean completeTx(SendRequest req) {
+    public boolean completeTx(SendRequest req, boolean sign) {
         lock.lock();
         try {
             Preconditions.checkArgument(!req.completed, "Given SendRequest has already been completed.");
@@ -1768,12 +1772,8 @@ public class Wallet implements Serializable, BlockChainListener, IsMultiBitClass
             }
 
             // Now sign the inputs, thus proving that we are entitled to redeem the connected outputs.
-            try {
-                req.tx.signInputs(Transaction.SigHash.ALL, this, req.aesKey);
-            } catch (ScriptException e) {
-                // If this happens it means an output script in a wallet tx could not be understood. That should never
-                // happen, if it does it means the wallet has got into an inconsistent state.
-                throw new RuntimeException(e);
+            if (sign) {
+                sign(req);
             }
 
             // Check size.
@@ -1801,6 +1801,17 @@ public class Wallet implements Serializable, BlockChainListener, IsMultiBitClass
             return true;
         } finally {
             lock.unlock();
+        }
+    }
+    
+    public void sign(SendRequest sendRequest) {
+        // Now sign the inputs, thus proving that we are entitled to redeem the connected outputs.
+        try {
+            sendRequest.tx.signInputs(Transaction.SigHash.ALL, this, sendRequest.aesKey);
+        } catch (ScriptException e) {
+            // If this happens it means an output script in a wallet tx could not be understood. That should never
+            // happen, if it does it means the wallet has got into an inconsistent state.
+            throw new RuntimeException(e);
         }
     }
 
