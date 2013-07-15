@@ -312,10 +312,16 @@ public class Wallet implements Serializable, BlockChainListener, IsMultiBitClass
         eventListeners = new CopyOnWriteArrayList<WalletEventListener>();
         extensions = new HashMap<String, WalletExtension>();
         
-        // If the wallet is encrypted, add a wallet protect extension.
         if (keyCrypter != null) {
+            // If the wallet is encrypted, add a wallet protect extension.
             MultiBitWalletExtension multibitWalletExtension = new MultiBitWalletExtension();
             extensions.put(multibitWalletExtension.getWalletExtensionID(), multibitWalletExtension);
+            
+            // The wallet version indicates the wallet is encrypted.
+            setVersion(MultiBitWalletVersion.PROTOBUF_ENCRYPTED);
+        } else {
+            // The wallet version indicates the wallet is unencrypted.
+            setVersion(MultiBitWalletVersion.PROTOBUF);
         }
         createTransientState();
     }
