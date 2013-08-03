@@ -17,6 +17,7 @@
 package com.google.bitcoin.core;
 
 import java.math.BigInteger;
+import java.util.List;
 
 /**
  * <p>Implementors are called when the contents of the wallet changes, for instance due to receiving/sending money
@@ -24,7 +25,7 @@ import java.math.BigInteger;
  */
 public interface WalletEventListener {
     /**
-     * This is called on a Peer thread when a transaction is seen that sends coins <b>to</b> this wallet, either because it
+     * This is called when a transaction is seen that sends coins <b>to</b> this wallet, either because it
      * was broadcast across the network or because a block was received. If a transaction is seen when it was broadcast,
      * onCoinsReceived won't be called again when a block containing it is received. If you want to know when such a
      * transaction receives its first confirmation, register a {@link TransactionConfidence} event listener using
@@ -39,7 +40,7 @@ public interface WalletEventListener {
     void onCoinsReceived(Wallet wallet, Transaction tx, BigInteger prevBalance, BigInteger newBalance);
 
     /**
-     * This is called on a Peer thread when a transaction is seen that sends coins <b>from</b> this wallet, either
+     * This is called when a transaction is seen that sends coins <b>from</b> this wallet, either
      * because it was broadcast across the network or because a block was received. This may at first glance seem 
      * useless, because in the common case you already know about such transactions because you created them with
      * the Wallets createSend/sendCoins methods. However when you have a wallet containing only keys, and you wish
@@ -58,8 +59,8 @@ public interface WalletEventListener {
 
     // TODO: Finish onReorganize to be more useful.
     /**
-     * <p>This is called on a Peer thread when a block is received that triggers a block chain re-organization.
-     * </p>
+     * <p>This is called when a block is received that triggers a block chain re-organization.</p>
+     *
      * <p>A re-organize means that the consensus (chain) of the network has diverged and now changed from what we
      * believed it was previously. Usually this won't matter because the new consensus will include all our old
      * transactions assuming we are playing by the rules. However it's theoretically possible for our balance to
@@ -70,7 +71,7 @@ public interface WalletEventListener {
     void onReorganize(Wallet wallet);
 
     /**
-     * <p>Called on a Peer thread when a transaction changes its confidence level. You can also attach event listeners to
+     * <p>Called when a transaction changes its confidence level. You can also attach event listeners to
      * the individual transactions, if you don't care about all of them. Usually you would save the wallet to disk after
      * receiving this callback unless you already set up autosaving.</p>
      *
@@ -114,7 +115,8 @@ public interface WalletEventListener {
     void onWalletChanged(Wallet wallet);
 
     /**
-     * Called by the {@link Wallet#addKey(ECKey)} method on whatever the calling thread was.
+     * Called whenever a new key is added to the wallet, whether that be via {@link Wallet#addKeys(java.util.List)}
+     * or due to some other automatic derivation.
      */
-    void onKeyAdded(ECKey key);
+    void onKeysAdded(Wallet wallet, List<ECKey> keys);
 }

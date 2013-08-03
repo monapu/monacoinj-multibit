@@ -6,6 +6,7 @@ import com.google.bitcoin.core.TransactionConfidence.ConfidenceType;
 import com.google.bitcoin.params.MainNetParams;
 import com.google.bitcoin.params.UnitTestParams;
 import com.google.bitcoin.utils.BriefLogFormatter;
+import com.google.bitcoin.utils.Threading;
 import com.google.protobuf.ByteString;
 import org.bitcoinj.wallet.Protos;
 import org.junit.Before;
@@ -180,6 +181,7 @@ public class WalletProtobufSerializerTest {
         //     genesis -> b1 -> b2
 
         // Check the transaction confidence levels are correct before wallet roundtrip.
+        Threading.waitForUserCode();
         assertEquals(2, txns.size());
 
         TransactionConfidence confidence0 = txns.get(0).getConfidence();
@@ -240,7 +242,6 @@ public class WalletProtobufSerializerTest {
         }
     }
 
-
     @Test
     public void testRoundTripNormalWallet() throws Exception {
         Wallet wallet1 = roundTrip(myWallet);     
@@ -252,7 +253,22 @@ public class WalletProtobufSerializerTest {
                 wallet1.findKeyFromPubHash(myKey.getPubKeyHash()).getPrivKeyBytes());
         assertEquals(myKey.getCreationTimeSeconds(),
                 wallet1.findKeyFromPubHash(myKey.getPubKeyHash()).getCreationTimeSeconds());
- 
+    }
+
+    @Test
+    public void coinbaseTxns() throws Exception {
+        // Covers issue 420 where the outpoint index of a coinbase tx input was being mis-serialized.
+        Block b = params.getGenesisBlock().createNextBlockWithCoinbase(myKey.getPubKey(), Utils.toNanoCoins(50, 0));
+        Transaction coinbase = b.getTransactions().get(0);
+        assertTrue(coinbase.isCoinBase());
+        BlockChain chain = new BlockChain(params, myWallet, new MemoryBlockStore(params));
+        assertTrue(chain.add(b));
+        // Wallet now has a coinbase tx in it.
+        assertEquals(1, myWallet.getTransactions(true).size());
+        assertTrue(myWallet.getTransaction(coinbase.getHash()).isCoinBase());
+        Wallet wallet2 = roundTrip(myWallet);
+        assertEquals(1, wallet2.getTransactions(true).size());
+        assertTrue(wallet2.getTransaction(coinbase.getHash()).isCoinBase());
     }
 
     @Test
@@ -264,8 +280,8 @@ public class WalletProtobufSerializerTest {
         try {
             new WalletProtobufSerializer().readWallet(proto, wallet2);
             fail();
-        } catch (IllegalArgumentException e) {
-            // Expected.
+        } catch (UnreadableWalletException e) {
+            assertTrue(e.getMessage().contains("mandatory"));
         }
         Wallet wallet3 = new Wallet(params);
         // This time it works.

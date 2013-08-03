@@ -20,6 +20,7 @@ import com.google.bitcoin.discovery.PeerDiscovery;
 import com.google.bitcoin.discovery.PeerDiscoveryException;
 import com.google.bitcoin.params.UnitTestParams;
 import com.google.bitcoin.store.MemoryBlockStore;
+import com.google.bitcoin.utils.Threading;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -205,7 +206,7 @@ public class PeerGroupTest extends TestWithPeerGroup {
             public void onTransaction(Peer peer, Transaction t) {
                 event[0] = t;
             }
-        });
+        }, Threading.SAME_THREAD);
 
         FakeChannel p1 = connectPeer(1);
         FakeChannel p2 = connectPeer(2);
@@ -240,7 +241,7 @@ public class PeerGroupTest extends TestWithPeerGroup {
         assertTrue(tx.getConfidence().wasBroadcastBy(peerOf(p2).getAddress()));
 
         tx.getConfidence().addEventListener(new TransactionConfidence.Listener() {
-            public void onConfidenceChanged(Transaction tx) {
+            public void onConfidenceChanged(Transaction tx, TransactionConfidence.Listener.ChangeReason reason) {
                 event[1] = tx;
             }
         });
@@ -285,6 +286,7 @@ public class PeerGroupTest extends TestWithPeerGroup {
         Address dest = new ECKey().toAddress(params);
         Wallet.SendResult sendResult = wallet.sendCoins(peerGroup, dest, Utils.toNanoCoins(1, 0));
         assertNotNull(sendResult.tx);
+        Threading.waitForUserCode();
         assertFalse(sendResult.broadcastComplete.isDone());
         assertEquals(transactions[0], sendResult.tx);
         assertEquals(transactions[0].getConfidence().numBroadcastPeers(), 1);
@@ -297,6 +299,7 @@ public class PeerGroupTest extends TestWithPeerGroup {
         InventoryMessage inv = new InventoryMessage(params);
         inv.addTransaction(t1);
         inbound(p2, inv);
+        Threading.waitForUserCode();
         assertTrue(sendResult.broadcastComplete.isDone());
         assertEquals(transactions[0], sendResult.tx);
         assertEquals(transactions[0].getConfidence().numBroadcastPeers(), 2);
@@ -315,8 +318,7 @@ public class PeerGroupTest extends TestWithPeerGroup {
         peerGroup.addWallet(wallet);
         // Transaction announced to the first peer.
         InventoryMessage inv1 = (InventoryMessage) outbound(p1);
-        assertTrue(outbound(p1) instanceof BloomFilter);   // Filter is recalculated.
-        assertTrue(outbound(p1) instanceof MemoryPoolMessage);
+        // Filter is still the same as it was, so it is not rebroadcast
         assertEquals(t3.getHash(), inv1.getItems().get(0).hash);
         // Peer asks for the transaction, and get it.
         GetDataMessage getdata = new GetDataMessage(params);
@@ -341,11 +343,13 @@ public class PeerGroupTest extends TestWithPeerGroup {
         key1.setCreationTimeSeconds(time - 86400);  // One day ago.
         w2.addKey(key1);
         peerGroup.addWallet(w2);
+        Threading.waitForUserCode();
         assertEquals(peerGroup.getFastCatchupTimeSecs(), time - 86400);
         // Adding a key to the wallet should update the fast catchup time.
         ECKey key2 = new ECKey();
         key2.setCreationTimeSeconds(time - 100000);
         w2.addKey(key2);
+        Threading.waitForUserCode();
         assertEquals(peerGroup.getFastCatchupTimeSecs(), time - 100000);
     }
 

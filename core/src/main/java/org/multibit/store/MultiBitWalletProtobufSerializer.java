@@ -49,6 +49,7 @@ import com.google.bitcoin.core.WalletTransaction;
 import com.google.bitcoin.crypto.EncryptedPrivateKey;
 import com.google.bitcoin.crypto.KeyCrypter;
 import com.google.bitcoin.crypto.KeyCrypterScrypt;
+import com.google.bitcoin.store.UnreadableWalletException;
 import com.google.bitcoin.store.WalletProtobufSerializer;
 import com.google.common.base.Preconditions;
 import com.google.protobuf.ByteString;
@@ -324,32 +325,39 @@ public class MultiBitWalletProtobufSerializer extends WalletProtobufSerializer {
      * @throws IOException if there is a problem reading the stream.
      * @throws IllegalArgumentException if the wallet is corrupt.
      */
-    public Wallet readWallet(InputStream input) throws IOException {
-        Protos.Wallet walletProto = parseToProto(input);
+    public Wallet readWallet(InputStream input) throws UnreadableWalletException {
+        try {
+            Protos.Wallet walletProto = parseToProto(input);
 
-        // System.out.println(TextFormat.printToString(walletProto));
+            // System.out.println(TextFormat.printToString(walletProto));
 
-        // Read the scrypt parameters that specify how encryption and decryption is performed.
-        EncryptionType walletEncryptionType = EncryptionType.UNENCRYPTED;
-        
-        if (walletProto.hasEncryptionType()) {
-            walletEncryptionType = walletProto.getEncryptionType();
-        }
-        KeyCrypter keyCrypter = null;
-        
-        if (walletEncryptionType == EncryptionType.ENCRYPTED_SCRYPT_AES) {
-            // Read the scrypt parameters that specify how encryption and decryption is performed.
-            if (walletProto.hasEncryptionParameters()) {
-                Protos.ScryptParameters encryptionParameters = walletProto.getEncryptionParameters();
-                keyCrypter = new KeyCrypterScrypt(encryptionParameters);
+            // Read the scrypt parameters that specify how encryption and
+            // decryption is performed.
+            EncryptionType walletEncryptionType = EncryptionType.UNENCRYPTED;
+
+            if (walletProto.hasEncryptionType()) {
+                walletEncryptionType = walletProto.getEncryptionType();
             }
+            KeyCrypter keyCrypter = null;
+
+            if (walletEncryptionType == EncryptionType.ENCRYPTED_SCRYPT_AES) {
+                // Read the scrypt parameters that specify how encryption and
+                // decryption is performed.
+                if (walletProto.hasEncryptionParameters()) {
+                    Protos.ScryptParameters encryptionParameters = walletProto.getEncryptionParameters();
+                    keyCrypter = new KeyCrypterScrypt(encryptionParameters);
+                }
+            }
+
+            NetworkParameters params = NetworkParameters.fromID(walletProto.getNetworkIdentifier());
+
+            Wallet wallet = new Wallet(params, keyCrypter);
+
+            readWallet(walletProto, wallet);
+            return wallet;
+        } catch (IOException e) {
+            throw new UnreadableWalletException("Could not read wallet", e);
         }
-
-        NetworkParameters params = NetworkParameters.fromID(walletProto.getNetworkIdentifier());
-
-        Wallet wallet = new Wallet(params, keyCrypter);
-        readWallet(walletProto, wallet);
-        return wallet;
     }
     
     /**
@@ -360,7 +368,7 @@ public class MultiBitWalletProtobufSerializer extends WalletProtobufSerializer {
      * @throws IOException if there is a problem reading the stream.
      * @throws IllegalArgumentException if the wallet is corrupt.
      */
-    public void readWallet(Protos.Wallet walletProto, Wallet wallet) throws IOException {        
+    public void readWallet(Protos.Wallet walletProto, Wallet wallet) throws UnreadableWalletException {        
         if (walletProto.hasDescription()) {
             wallet.setDescription(walletProto.getDescription());
         }
@@ -593,7 +601,6 @@ public class MultiBitWalletProtobufSerializer extends WalletProtobufSerializer {
             case DEAD: confidenceType = ConfidenceType.DEAD; break;
             // These two are equivalent (must be able to read old wallets).
             case NOT_IN_BEST_CHAIN: confidenceType = ConfidenceType.PENDING; break;
-            case NOT_SEEN_IN_CHAIN: confidenceType = ConfidenceType.PENDING; break;
             case UNKNOWN:
                 // Fall through.
             default:

@@ -4,7 +4,7 @@
 
   <groupId>com.google</groupId>
   <artifactId>bitcoinj-parent</artifactId>
-  <version>0.9-MB-ALICE-SNAPSHOT</version>
+  <version>0.10-MB-ALICE</version>
   <packaging>pom</packaging>
 
   <modules>
@@ -42,13 +42,19 @@
     </mailingList>
   </mailingLists>
 
+  <distributionManagement>
+    <repository>
+        <id>bitcoinj-distribution</id>
+        <url>https://distribution.bitcoinj.googlecode.com/git/releases</url>
+    </repository>
+  </distributionManagement>
+
   <scm>
     <url>http://code.google.com/p/bitcoinj/source/checkout</url>
   </scm>
 
   <!-- Common build plugin configuration -->
   <build>
-      <pluginManagement>
         <plugins>
           <!-- Ensure compilation is done under Java 5 for backwards compatibility -->
           <plugin>
@@ -62,8 +68,7 @@
               <showWarnings>true</showWarnings>
             </configuration>
           </plugin>
-        </plugins>
-    </pluginManagement>
+    </plugins>
   </build>
 
   <!-- Common dependencies -->

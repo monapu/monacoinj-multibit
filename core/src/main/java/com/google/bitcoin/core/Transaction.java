@@ -17,6 +17,7 @@
 package com.google.bitcoin.core;
 
 import com.google.bitcoin.core.TransactionConfidence.ConfidenceType;
+import com.google.bitcoin.crypto.TransactionSignature;
 import com.google.bitcoin.script.Script;
 import com.google.bitcoin.script.ScriptBuilder;
 import com.google.bitcoin.script.ScriptOpCodes;
@@ -55,23 +56,25 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
     /** Threshold for lockTime: below this value it is interpreted as block number, otherwise as timestamp. **/
     public static final int LOCKTIME_THRESHOLD = 500000000; // Tue Nov  5 00:53:20 1985 UTC
 
-    /** How many bytes a transaction can be before it won't be relayed anymore. */
+    /** How many bytes a transaction can be before it won't be relayed anymore. Currently 100kb. */
     public static final int MAX_STANDARD_TX_SIZE = 100 * 1024;
 
-    /** If fee is lower than this value (in satoshis), a default reference client will treat it as if there were no fee */
+    /**
+     * If fee is lower than this value (in satoshis), a default reference client will treat it as if there were no fee.
+     * Currently this is 10000 satoshis.
+     */
     public static final BigInteger REFERENCE_DEFAULT_MIN_TX_FEE = BigInteger.valueOf(10000);
 
     /**
      * Any standard (ie pay-to-address) output smaller than this value (in satoshis) will most likely be rejected by the network.
      * This is calculated by assuming a standard output will be 34 bytes, and then using the formula used in
-     * {@link TransactionOutput#getMinNonDustValue(BigInteger)}.
+     * {@link TransactionOutput#getMinNonDustValue(BigInteger)}. Currently it's 5460 satoshis.
      */
     public static final BigInteger MIN_NONDUST_OUTPUT = BigInteger.valueOf(5460);
 
     // These are serialized in both bitcoin and java serialization.
     private long version;
     private ArrayList<TransactionInput> inputs;
-
     private ArrayList<TransactionOutput> outputs;
 
     private long lockTime;
@@ -273,8 +276,6 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
         addBlockAppearance(block.getHeader().getHash());
 
         if (bestChain) {
-            // This can cause event listeners on TransactionConfidence to run. After these lines complete, the wallets
-            // state may have changed!
             TransactionConfidence transactionConfidence = getConfidence();
             // Reset the work done.
             try {
@@ -578,7 +579,7 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
                             chain.estimateBlockTime((int)lockTime).toString() + ")";
                 }
             } else {
-                time = new Date(lockTime).toString();
+                time = new Date(lockTime*1000).toString();
             }
             s.append(String.format("  time locked until %s%n", time));
         }
@@ -773,8 +774,7 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
         // Note that each input may be claiming an output sent to a different key. So we have to look at the outputs
         // to figure out which key to sign with.
 
-        int[] sigHashFlags = new int[inputs.size()];
-        ECKey.ECDSASignature[] signatures = new ECKey.ECDSASignature[inputs.size()];
+        TransactionSignature[] signatures = new TransactionSignature[inputs.size()];
         ECKey[] signingKeys = new ECKey[inputs.size()];
         for (int i = 0; i < inputs.size(); i++) {
             TransactionInput input = inputs.get(i);
@@ -790,7 +790,9 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
                 input.getScriptSig().correctlySpends(this, i, input.getOutpoint().getConnectedOutput().getScriptPubKey(), true);
                 log.warn("Input {} already correctly spends output, assuming SIGHASH type used will be safe and skipping signing.", i);
                 continue;
-            } catch (ScriptException e) {}
+            } catch (ScriptException e) {
+                // Expected.
+            }
             if (input.getScriptBytes().length != 0)
                 log.warn("Re-signing an already signed transaction! Be sure this is what you want.");
             // Find the signing key we'll need to use.
@@ -803,12 +805,7 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
             // The anyoneCanPay feature isn't used at the moment.
             boolean anyoneCanPay = false;
             byte[] connectedPubKeyScript = input.getOutpoint().getConnectedPubKeyScript();
-            Sha256Hash hash = hashTransactionForSignature(i, connectedPubKeyScript, hashType, anyoneCanPay);
-
-            // Now calculate the signatures we need to prove we own this transaction and are authorized to claim the
-            // associated money.
-            signatures[i] = key.sign(hash, aesKey);
-            sigHashFlags[i] = (hashType.ordinal() + 1) | (anyoneCanPay ? SIGHASH_ANYONECANPAY_VALUE : 0);
+            signatures[i] = calculateSignature(i, key, aesKey, connectedPubKeyScript, hashType, anyoneCanPay);
         }
 
         // Now we have calculated each signature, go through and create the scripts. Reminder: the script consists:
@@ -822,9 +819,9 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
             TransactionInput input = inputs.get(i);
             Script scriptPubKey = input.getOutpoint().getConnectedOutput().getScriptPubKey();
             if (scriptPubKey.isSentToAddress()) {
-                input.setScriptSig(ScriptBuilder.createInputScript(signatures[i], signingKeys[i], sigHashFlags[i]));
+                input.setScriptSig(ScriptBuilder.createInputScript(signatures[i], signingKeys[i]));
             } else if (scriptPubKey.isSentToRawPubKey()) {
-                input.setScriptSig(ScriptBuilder.createInputScript(signatures[i], sigHashFlags[i]));
+                input.setScriptSig(ScriptBuilder.createInputScript(signatures[i]));
             } else {
                 // Should be unreachable - if we don't recognize the type of script we're trying to sign for, we should
                 // have failed above when fetching the key to sign with.
@@ -833,6 +830,45 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
         }
 
         // Every input is now complete.
+    }
+
+    /**
+     * Calculates a signature that is valid for being inserted into the input at the given position. This is simply
+     * a wrapper around calling {@link Transaction#hashForSignature(int, byte[], com.google.bitcoin.core.Transaction.SigHash, boolean)}
+     * followed by {@link ECKey#sign(Sha256Hash, org.spongycastle.crypto.params.KeyParameter)} and then returning
+     * a new {@link TransactionSignature}.
+     *
+     * @param inputIndex Which input to calculate the signature for, as an index.
+     * @param key The private key used to calculate the signature.
+     * @param aesKey If not null, this will be used to decrypt the key.
+     * @param connectedPubKeyScript Byte-exact contents of the scriptPubKey that is being satisified.
+     * @param hashType Signing mode, see the enum for documentation.
+     * @param anyoneCanPay Signing mode, see the SigHash enum for documentation.
+     * @return A newly calculated signature object that wraps the r, s and sighash components.
+     */
+    public synchronized  TransactionSignature calculateSignature(int inputIndex, ECKey key, KeyParameter aesKey,
+                                                                 byte[] connectedPubKeyScript,
+                                                                 SigHash hashType, boolean anyoneCanPay) {
+        Sha256Hash hash = hashForSignature(inputIndex, connectedPubKeyScript, hashType, anyoneCanPay);
+        return new TransactionSignature(key.sign(hash, aesKey), hashType, anyoneCanPay);
+    }
+
+    /**
+     * Calculates a signature that is valid for being inserted into the input at the given position. This is simply
+     * a wrapper around calling {@link Transaction#hashForSignature(int, byte[], com.google.bitcoin.core.Transaction.SigHash, boolean)}
+     * followed by {@link ECKey#sign(Sha256Hash)} and then returning a new {@link TransactionSignature}.
+     *
+     * @param inputIndex Which input to calculate the signature for, as an index.
+     * @param key The private key used to calculate the signature.
+     * @param connectedPubKeyScript The scriptPubKey that is being satisified.
+     * @param hashType Signing mode, see the enum for documentation.
+     * @param anyoneCanPay Signing mode, see the SigHash enum for documentation.
+     * @return A newly calculated signature object that wraps the r, s and sighash components.
+     */
+    public synchronized  TransactionSignature calculateSignature(int inputIndex, ECKey key, Script connectedPubKeyScript,
+                                                                 SigHash hashType, boolean anyoneCanPay) {
+        Sha256Hash hash = hashForSignature(inputIndex, connectedPubKeyScript.getProgram(), hashType, anyoneCanPay);
+        return new TransactionSignature(key.sign(hash), hashType, anyoneCanPay);
     }
 
     /**
@@ -847,9 +883,10 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
      * @param type Should be SigHash.ALL
      * @param anyoneCanPay should be false.
      */
-    public synchronized Sha256Hash hashTransactionForSignature(int inputIndex, byte[] connectedScript,
-                                                               SigHash type, boolean anyoneCanPay) {
-        return hashTransactionForSignature(inputIndex, connectedScript, (byte)((type.ordinal() + 1) | (anyoneCanPay ? SIGHASH_ANYONECANPAY_VALUE : 0x00)));
+    public synchronized Sha256Hash hashForSignature(int inputIndex, byte[] connectedScript,
+                                                    SigHash type, boolean anyoneCanPay) {
+        byte sigHashType = (byte) TransactionSignature.calcSigHashValue(type, anyoneCanPay);
+        return hashForSignature(inputIndex, connectedScript, sigHashType);
     }
 
     /**
@@ -864,20 +901,17 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
      * @param type Should be SigHash.ALL
      * @param anyoneCanPay should be false.
      */
-    public synchronized Sha256Hash hashTransactionForSignature(int inputIndex, Script connectedScript,
-                                                               SigHash type, boolean anyoneCanPay) {
-        return hashTransactionForSignature(inputIndex, connectedScript.getProgram(),
-                (byte)((type.ordinal() + 1) | (anyoneCanPay ? SIGHASH_ANYONECANPAY_VALUE : 0x00)));
+    public synchronized Sha256Hash hashForSignature(int inputIndex, Script connectedScript,
+                                                    SigHash type, boolean anyoneCanPay) {
+        int sigHash = TransactionSignature.calcSigHashValue(type, anyoneCanPay);
+        return hashForSignature(inputIndex, connectedScript.getProgram(), (byte) sigHash);
     }
 
     /**
      * This is required for signatures which use a sigHashType which cannot be represented using SigHash and anyoneCanPay
      * See transaction c99c49da4c38af669dea436d3e73780dfdb6c1ecf9958baa52960e8baee30e73, which has sigHashType 0
      */
-    public synchronized Sha256Hash hashTransactionForSignature(int inputIndex, byte[] connectedScript,
-            byte sigHashType) {
-        // TODO: This whole separate method should be un-necessary if we fix how we deserialize sighash flags.
-
+    public synchronized Sha256Hash hashForSignature(int inputIndex, byte[] connectedScript, byte sigHashType) {
         // The SIGHASH flags are used in the design of contracts, please see this page for a further understanding of
         // the purposes of the code in this method:
         //

@@ -16,6 +16,7 @@
 
 package com.google.bitcoin.core;
 
+import com.google.bitcoin.utils.Threading;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
@@ -73,7 +74,7 @@ public class TransactionConfidence implements Serializable, IsMultiBitClass {
     private int broadcastByCount;
 
     /** The Transaction that this confidence object is associated with. */
-    private Transaction transaction;
+    private final Transaction transaction;
     // Lazily created listeners array.
     private transient CopyOnWriteArrayList<Listener> listeners;
 
@@ -169,7 +170,30 @@ public class TransactionConfidence implements Serializable, IsMultiBitClass {
      * <p>During listener execution, it's safe to remove the current listener but not others.</p>
      */
     public interface Listener {
-        public void onConfidenceChanged(Transaction tx);
+        /** An enum that describes why a transaction confidence listener is being invoked (i.e. the class of change). */
+        public enum ChangeReason {
+            /**
+             * Occurs when the type returned by {@link com.google.bitcoin.core.TransactionConfidence#getConfidenceType()}
+             * has changed. For example, if a PENDING transaction changes to BUILDING or DEAD, then this reason will
+             * be given. It's a high level summary.
+             */
+            TYPE,
+
+            /**
+             * Occurs when a transaction that is in the best known block chain gets buried by another block. If you're
+             * waiting for a certain number of confirmations, this is the reason to watch out for.
+             */
+            DEPTH,
+
+            /**
+             * Occurs when a pending transaction (not in the chain) was announced by another connected peers. By
+             * watching the number of peers that announced a transaction go up, you can see whether it's being
+             * accepted by the network or not. If all your peers announce, it's a pretty good bet the transaction
+             * is considered relayable and has thus reached the miners.
+             */
+            SEEN_PEERS,
+        }
+        public void onConfidenceChanged(Transaction tx, ChangeReason reason);
     }
 
     /**
@@ -227,19 +251,16 @@ public class TransactionConfidence implements Serializable, IsMultiBitClass {
      * Called by other objects in the system, like a {@link Wallet}, when new information about the confidence of a 
      * transaction becomes available.
      */
-    public void setConfidenceType(ConfidenceType confidenceType) {
+    public synchronized void setConfidenceType(ConfidenceType confidenceType) {
         // Don't inform the event listeners if the confidence didn't really change.
-        synchronized (this) {
-            if (confidenceType == this.confidenceType)
-                return;
-            this.confidenceType = confidenceType;
-            if (confidenceType == ConfidenceType.PENDING) {
-                depth = 0;
-                appearedAtChainHeight = -1;
-                workDone = BigInteger.ZERO;
-            }
+        if (confidenceType == this.confidenceType)
+            return;
+        this.confidenceType = confidenceType;
+        if (confidenceType == ConfidenceType.PENDING) {
+            depth = 0;
+            appearedAtChainHeight = -1;
+            workDone = BigInteger.ZERO;
         }
-        runListeners();
     }
 
 
@@ -251,7 +272,8 @@ public class TransactionConfidence implements Serializable, IsMultiBitClass {
      *
      * @param address IP address of the peer, used as a proxy for identity.
      */
-    public void markBroadcastBy(PeerAddress address) {
+
+    public synchronized void markBroadcastBy(PeerAddress address) {
         // System.out.println("TransactionConfidence#markBroadcastBy peer " + address.toString());
 
         if (!broadcastBy.addIfAbsent(address))
@@ -264,7 +286,7 @@ public class TransactionConfidence implements Serializable, IsMultiBitClass {
             }
         }
         // System.out.println("TransactionConfidence#markBroadcastBy BEFORE runListeners");
-        runListeners();
+        //runListeners();
         // System.out.println("TransactionConfidence#markBroadcastBy AFTER runListeners");
     }
 
@@ -322,17 +344,13 @@ public class TransactionConfidence implements Serializable, IsMultiBitClass {
      * Updates the internal counter that tracks how deeply buried the block is.
      * Work is the value of block.getWork().
      */
-    public void notifyWorkDone(Block block) throws VerificationException {
-        boolean notify = false;
-        synchronized (this) {
-            if (getConfidenceType() == ConfidenceType.BUILDING) {
-                this.depth++;
-                this.workDone = this.workDone.add(block.getWork());
-                notify = true;
-            }
-        }
-        if (notify)
-            runListeners();
+    public synchronized boolean notifyWorkDone(Block block) throws VerificationException {
+        if (getConfidenceType() != ConfidenceType.BUILDING)
+            return false;   // Should this be an assert?
+
+        this.depth++;
+        this.workDone = this.workDone.add(block.getWork());
+        return true;
     }
 
     /**
@@ -410,11 +428,26 @@ public class TransactionConfidence implements Serializable, IsMultiBitClass {
         }
     }
 
-    private void runListeners() {
-        // System.out.println("TransactionConfidence#runListeners Run listeners called for tx " + transaction.getHashAsString() + ", numberofListeners = " + listeners.size());
-        for (Listener listener : listeners) {
-            // System.out.println("TransactionConfidence#runListeners Listeners called for listener " + listener);
-            listener.onConfidenceChanged(transaction);
+//    private void runListeners() {
+//        // System.out.println("TransactionConfidence#runListeners Run listeners called for tx " + transaction.getHashAsString() + ", numberofListeners = " + listeners.size());
+//        for (Listener listener : listeners) {
+//            // System.out.println("TransactionConfidence#runListeners Listeners called for listener " + listener);
+//            listener.onConfidenceChanged(transaction);
+//    }
+        
+    /**
+     * Call this after adjusting the confidence, for cases where listeners should be notified. This has to be done
+     * explicitly rather than being done automatically because sometimes complex changes to transaction states can
+     * result in a series of confidence changes that are not really useful to see separately. By invoking listeners
+     * explicitly, more precise control is available. Note that this will run the listeners on the user code thread.
+     */
+    public void queueListeners(final Listener.ChangeReason reason) {
+        for (final Listener listener : listeners) {
+            Threading.USER_THREAD.execute(new Runnable() {
+                @Override public void run() {
+                    listener.onConfidenceChanged(transaction, reason);
+                }
+            });
         }
     }
 
@@ -443,21 +476,20 @@ public class TransactionConfidence implements Serializable, IsMultiBitClass {
      * depth to one will wait until it appears in a block on the best chain, and zero will wait until it has been seen
      * on the network.
      */
-    public ListenableFuture<Transaction> getDepthFuture(final int depth) {
+    public synchronized ListenableFuture<Transaction> getDepthFuture(final int depth) {
         final SettableFuture<Transaction> result = SettableFuture.create();
-        synchronized (this) {
-            if (getDepthInBlocks() >= depth) {
-                result.set(transaction);
-            }
-            addEventListener(new Listener() {
-                @Override public void onConfidenceChanged(Transaction tx) {
-                    if (getDepthInBlocks() >= depth) {
-                        removeEventListener(this);
-                        result.set(transaction);
-                    }
-                }
-            });
+        if (getDepthInBlocks() >= depth) {
+            result.set(transaction);
         }
+        addEventListener(new Listener() {
+            @Override public void onConfidenceChanged(Transaction tx, ChangeReason reason) {
+                // Runs in user code thread.
+                if (getDepthInBlocks() >= depth) {
+                    removeEventListener(this);
+                    result.set(transaction);
+                }
+            }
+        });
         return result;
     }
 

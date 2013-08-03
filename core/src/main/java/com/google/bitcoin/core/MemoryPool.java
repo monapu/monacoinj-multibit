@@ -16,7 +16,7 @@
 
 package com.google.bitcoin.core;
 
-import com.google.bitcoin.utils.Locks;
+import com.google.bitcoin.utils.Threading;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -45,7 +45,7 @@ import static com.google.common.base.Preconditions.checkState;
  */
 public class MemoryPool {
     private static final Logger log = LoggerFactory.getLogger(MemoryPool.class);
-    protected ReentrantLock lock = Locks.lock("mempool");
+    protected ReentrantLock lock = Threading.lock("mempool");
 
     // For each transaction we may have seen:
     //   - only its hash in an inv packet
@@ -168,9 +168,6 @@ public class MemoryPool {
      * @return An object that is semantically the same TX but may be a different object instance.
      */
     public Transaction seen(Transaction tx, PeerAddress byPeer) {
-        // System.out.println("MemoryPool#seen peer " + byPeer.toString() + ", tx = " + tx.getHashAsString() + ", identityHashCode = " + System.identityHashCode(tx));
-
-        boolean skipUnlock = false;
         lock.lock();
         try {
             cleanPool();
@@ -205,13 +202,8 @@ public class MemoryPool {
                     TransactionConfidence confidence = tx.getConfidence();
                     log.debug("{}: Adding tx [{}] {} to the memory pool",
                             new Object[]{byPeer, confidence.numBroadcastPeers(), tx.getHashAsString()});
-                    // Copy the previously announced peers into the confidence and then clear it out. Unlock here
-                    // because markBroadcastBy can trigger event listeners and thus inversions. After the lock is
-                    // released "entry" may be changing arbitrarily and isn't usable.
-                    skipUnlock = true;
-                    lock.unlock();
                     for (PeerAddress a : addrs) {
-                        confidence.markBroadcastBy(a);
+                        markBroadcast(a, tx);
                     }
                     return tx;
                 }
@@ -227,7 +219,7 @@ public class MemoryPool {
                 return tx;
             }
         } finally {
-            if (!skipUnlock) lock.unlock();
+            lock.unlock();
         }
     }
 
@@ -274,16 +266,10 @@ public class MemoryPool {
     }
 
     private void markBroadcast(PeerAddress byPeer, Transaction tx) {
-        // Marking a TX as broadcast by a peer can run event listeners that might call back into Peer or PeerGroup.
-        // Thus we unlock ourselves here to avoid potential inversions.
-        //System.out.println("MemoryPool#markBroadcastBy peer " + byPeer.toString() + ", tx = " + tx.getHashAsString() + ", identityHashCode = " + System.identityHashCode(tx));
-        checkState(lock.isLocked());
-        lock.unlock();
-        try {
-            tx.getConfidence().markBroadcastBy(byPeer);
-        } finally {
-            lock.lock();
-        }
+        checkState(lock.isHeldByCurrentThread());
+        final TransactionConfidence confidence = tx.getConfidence();
+        confidence.markBroadcastBy(byPeer);
+        confidence.queueListeners(TransactionConfidence.Listener.ChangeReason.SEEN_PEERS);
     }
 
     /**

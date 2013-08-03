@@ -54,7 +54,7 @@ public class RefreshWallet {
         // Now download and process the block chain.
         peerGroup.downloadBlockChain();
         peerGroup.stop();
-        wallet.saveToFile(file);
+        //wallet.saveToFile(file);
         System.out.println("\nDone!\n");
         System.out.println(wallet.toString());
     }
