@@ -106,6 +106,23 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
     // can properly keep track of optimal encoded size
     private transient int optimalEncodingMessageSize;
 
+    /**
+     * This enum describes the underlying reason the transaction was created. It's useful for rendering wallet GUIs
+     * more appropriately.
+     */
+    public enum Purpose {
+        /** Used when the purpose of a transaction is genuinely unknown. */
+        UNKNOWN,
+        /** Transaction created to satisfy a user payment request. */
+        USER_PAYMENT,
+        /** Transaction automatically created and broadcast in order to reallocate money from old to new keys. */
+        KEY_ROTATION,
+
+        // In future: de/refragmentation, privacy boosting/mixing, child-pays-for-parent fees, etc.
+    }
+
+    private Purpose purpose = Purpose.UNKNOWN;
+
     public Transaction(NetworkParameters params) {
         super(params);
         version = 1;
@@ -1286,7 +1303,7 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
     
     /**
      * Calculate the fee for a spend
-     * @param transaction Must be a spend as for a receive we do not have the connected output
+     * @param wallet Must be a spend as for a receive we do not have the connected output
      * @return BigInteger containing fee
      */
     public BigInteger calculateFee(Wallet wallet) {
@@ -1342,6 +1359,22 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
             v = v.add(connected.getValue());
         }
         return v;
+    }
+
+    /**
+     * Returns the purpose for which this transaction was created. See the javadoc for {@link Purpose} for more
+     * information on the point of this field and what it can be.
+     */
+    public Purpose getPurpose() {
+        return purpose;
+    }
+
+    /**
+     * Marks the transaction as being created for the given purpose. See the javadoc for {@link Purpose} for more
+     * information on the point of this field and what it can be.
+     */
+    public void setPurpose(Purpose purpose) {
+        this.purpose = purpose;
     }
 }
 

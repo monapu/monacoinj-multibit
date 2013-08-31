@@ -21,7 +21,7 @@
     <parent>
         <groupId>com.google</groupId>
         <artifactId>bitcoinj-parent</artifactId>
-        <version>0.10-MB-ALICE</version>
+        <version>0.10.1-MB-ALICE</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
@@ -57,8 +57,6 @@
                                     <!-- Format is URN of groupId:artifactId:version:type:classifier:scope:hash -->
                                     <!-- classifier is "null" if not present -->
                                     <urns>
-                                        <!-- Verify bitcoinj is not tampered with -->
-                                        <urn>com.google:bitcoinj:0.10:jar:null:runtime:cd0bb81f4d3dd260e2c8df2e2e60b98bb7b5c6d6</urn>
                                         <!-- A check for the rules themselves -->
                                         <urn>uk.co.froot.maven.enforcer:digest-enforcer-rules:0.0.1:jar:null:runtime:16a9e04f3fe4bb143c42782d07d5faf65b32106f</urn>
                                     </urns>
