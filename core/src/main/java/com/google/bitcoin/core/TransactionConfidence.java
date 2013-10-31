@@ -272,22 +272,15 @@ public class TransactionConfidence implements Serializable, IsMultiBitClass {
      *
      * @param address IP address of the peer, used as a proxy for identity.
      */
-
-    public synchronized void markBroadcastBy(PeerAddress address) {
-        // System.out.println("TransactionConfidence#markBroadcastBy peer " + address.toString());
-
+    public synchronized boolean markBroadcastBy(PeerAddress address) {
         if (!broadcastBy.addIfAbsent(address))
-            return;  // Duplicate.
+            return false;  // Duplicate.
         broadcastByCount++;
 
-        synchronized (this) {
-            if (getConfidenceType() == ConfidenceType.UNKNOWN) {
-                this.confidenceType = ConfidenceType.PENDING;
-            }
+        if (getConfidenceType() == ConfidenceType.UNKNOWN) {
+            this.confidenceType = ConfidenceType.PENDING;
         }
-        // System.out.println("TransactionConfidence#markBroadcastBy BEFORE runListeners");
-        //runListeners();
-        // System.out.println("TransactionConfidence#markBroadcastBy AFTER runListeners");
+        return true;
     }
 
     /**
@@ -427,13 +420,6 @@ public class TransactionConfidence implements Serializable, IsMultiBitClass {
             return c;
         }
     }
-
-//    private void runListeners() {
-//        // System.out.println("TransactionConfidence#runListeners Run listeners called for tx " + transaction.getHashAsString() + ", numberofListeners = " + listeners.size());
-//        for (Listener listener : listeners) {
-//            // System.out.println("TransactionConfidence#runListeners Listeners called for listener " + listener);
-//            listener.onConfidenceChanged(transaction);
-//    }
         
     /**
      * Call this after adjusting the confidence, for cases where listeners should be notified. This has to be done

@@ -16,7 +16,19 @@
 
 package com.google.bitcoin.store;
 
-import static com.google.common.base.Preconditions.checkNotNull;
+import com.google.bitcoin.core.*;
+import com.google.bitcoin.core.TransactionConfidence.ConfidenceType;
+import com.google.bitcoin.crypto.EncryptedPrivateKey;
+import com.google.bitcoin.crypto.KeyCrypter;
+import com.google.bitcoin.crypto.KeyCrypterScrypt;
+import com.google.protobuf.ByteString;
+import com.google.protobuf.TextFormat;
+import org.bitcoinj.wallet.Protos;
+import org.bitcoinj.wallet.Protos.Wallet.EncryptionType;
+import org.multibit.store.MultiBitWalletVersion;
+import org.multibit.store.WalletVersionException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -29,20 +41,7 @@ import java.util.HashMap;
 import java.util.ListIterator;
 import java.util.Map;
 
-import org.bitcoinj.wallet.Protos;
-import org.bitcoinj.wallet.Protos.Wallet.EncryptionType;
-import org.multibit.store.MultiBitWalletVersion;
-import org.multibit.store.WalletVersionException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import com.google.bitcoin.core.*;
-import com.google.bitcoin.core.TransactionConfidence.ConfidenceType;
-import com.google.bitcoin.crypto.EncryptedPrivateKey;
-import com.google.bitcoin.crypto.KeyCrypter;
-import com.google.bitcoin.crypto.KeyCrypterScrypt;
-import com.google.protobuf.ByteString;
-import com.google.protobuf.TextFormat;
+import static com.google.common.base.Preconditions.checkNotNull;
 
 /**
  * Serialize and de-serialize a wallet to a byte stream containing a
@@ -239,9 +238,11 @@ public class WalletProtobufSerializer {
         }
         
         // Handle which blocks tx was seen in.
-        if (tx.getAppearsInHashes() != null) {
-            for (Sha256Hash hash : tx.getAppearsInHashes()) {
-                txBuilder.addBlockHash(hashToByteString(hash));
+        final Map<Sha256Hash, Integer> appearsInHashes = tx.getAppearsInHashes();
+        if (appearsInHashes != null) {
+            for (Map.Entry<Sha256Hash, Integer> entry : appearsInHashes.entrySet()) {
+                txBuilder.addBlockHash(hashToByteString(entry.getKey()));
+                txBuilder.addBlockRelativityOffsets(entry.getValue());
             }
         }
         
@@ -499,8 +500,12 @@ public class WalletProtobufSerializer {
             tx.addInput(input);
         }
 
-        for (ByteString blockHash : txProto.getBlockHashList()) {
-            tx.addBlockAppearance(byteStringToHash(blockHash));
+        for (int i = 0; i < txProto.getBlockHashCount(); i++) {
+            ByteString blockHash = txProto.getBlockHash(i);
+            int relativityOffset = 0;
+            if (txProto.getBlockRelativityOffsetsCount() > 0)
+                relativityOffset = txProto.getBlockRelativityOffsets(i);
+            tx.addBlockAppearance(byteStringToHash(blockHash), relativityOffset);
         }
 
         if (txProto.hasLockTime()) {

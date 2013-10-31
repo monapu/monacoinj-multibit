@@ -16,7 +16,20 @@
 
 package org.multibit.store;
 
-import static com.google.common.base.Preconditions.checkNotNull;
+import com.google.bitcoin.core.*;
+import com.google.bitcoin.core.TransactionConfidence.ConfidenceType;
+import com.google.bitcoin.crypto.EncryptedPrivateKey;
+import com.google.bitcoin.crypto.KeyCrypter;
+import com.google.bitcoin.crypto.KeyCrypterScrypt;
+import com.google.bitcoin.store.UnreadableWalletException;
+import com.google.bitcoin.store.WalletProtobufSerializer;
+import com.google.common.base.Preconditions;
+import com.google.protobuf.ByteString;
+import com.google.protobuf.TextFormat;
+import org.bitcoinj.wallet.Protos;
+import org.bitcoinj.wallet.Protos.Wallet.EncryptionType;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -28,32 +41,7 @@ import java.util.Date;
 import java.util.ListIterator;
 import java.util.Map;
 
-import org.bitcoinj.wallet.Protos;
-import org.bitcoinj.wallet.Protos.Wallet.EncryptionType;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import com.google.bitcoin.core.ECKey;
-import com.google.bitcoin.core.NetworkParameters;
-import com.google.bitcoin.core.PeerAddress;
-import com.google.bitcoin.core.Sha256Hash;
-import com.google.bitcoin.core.Transaction;
-import com.google.bitcoin.core.TransactionConfidence;
-import com.google.bitcoin.core.TransactionConfidence.ConfidenceType;
-import com.google.bitcoin.core.TransactionInput;
-import com.google.bitcoin.core.TransactionOutPoint;
-import com.google.bitcoin.core.TransactionOutput;
-import com.google.bitcoin.core.Wallet;
-import com.google.bitcoin.core.WalletExtension;
-import com.google.bitcoin.core.WalletTransaction;
-import com.google.bitcoin.crypto.EncryptedPrivateKey;
-import com.google.bitcoin.crypto.KeyCrypter;
-import com.google.bitcoin.crypto.KeyCrypterScrypt;
-import com.google.bitcoin.store.UnreadableWalletException;
-import com.google.bitcoin.store.WalletProtobufSerializer;
-import com.google.common.base.Preconditions;
-import com.google.protobuf.ByteString;
-import com.google.protobuf.TextFormat;
+import static com.google.common.base.Preconditions.checkNotNull;
 
 /**
  * Serialize and de-serialize a wallet to a byte stream containing a
@@ -250,11 +238,13 @@ public class MultiBitWalletProtobufSerializer extends WalletProtobufSerializer {
             }
             txBuilder.addTransactionOutput(outputBuilder);
         }
-        
+
         // Handle which blocks tx was seen in.
-        if (tx.getAppearsInHashes() != null) {
-            for (Sha256Hash hash : tx.getAppearsInHashes()) {
-                txBuilder.addBlockHash(hashToByteString(hash));
+        final Map<Sha256Hash, Integer> appearsInHashes = tx.getAppearsInHashes();
+        if (appearsInHashes != null) {
+            for (Map.Entry<Sha256Hash, Integer> entry : appearsInHashes.entrySet()) {
+                txBuilder.addBlockHash(hashToByteString(entry.getKey()));
+                txBuilder.addBlockRelativityOffsets(entry.getValue());
             }
         }
         
@@ -532,8 +522,12 @@ public class MultiBitWalletProtobufSerializer extends WalletProtobufSerializer {
             tx.addInput(input);
         }
 
-        for (ByteString blockHash : txProto.getBlockHashList()) {
-            tx.addBlockAppearance(byteStringToHash(blockHash));
+        for (int i = 0; i < txProto.getBlockHashCount(); i++) {
+            ByteString blockHash = txProto.getBlockHash(i);
+            int relativityOffset = 0;
+            if (txProto.getBlockRelativityOffsetsCount() > 0)
+                relativityOffset = txProto.getBlockRelativityOffsets(i);
+            tx.addBlockAppearance(byteStringToHash(blockHash), relativityOffset);
         }
 
         if (txProto.hasLockTime()) {

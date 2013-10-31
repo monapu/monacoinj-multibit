@@ -27,12 +27,12 @@ import org.junit.Test;
 
 import java.math.BigInteger;
 import java.net.InetSocketAddress;
-import java.util.Date;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
+import static com.google.common.base.Preconditions.checkNotNull;
 import static org.junit.Assert.*;
 
 public class PeerGroupTest extends TestWithPeerGroup {
@@ -303,7 +303,7 @@ public class PeerGroupTest extends TestWithPeerGroup {
         Threading.waitForUserCode();
         assertTrue(sendResult.broadcastComplete.isDone());
         assertEquals(transactions[0], sendResult.tx);
-        assertEquals(transactions[0].getConfidence().numBroadcastPeers(), 2);
+        assertEquals(2, transactions[0].getConfidence().numBroadcastPeers());
         // Confirm it.
         Block b2 = TestUtils.createFakeBlock(blockStore, t1).block;
         inbound(p1, b2);
@@ -313,45 +313,34 @@ public class PeerGroupTest extends TestWithPeerGroup {
         peerGroup.removeWallet(wallet);
         Wallet.SendRequest req = Wallet.SendRequest.to(dest, Utils.toNanoCoins(2, 0));
         req.ensureMinRequiredFee = false;
-        Transaction t3 = wallet.sendCoinsOffline(req);
+        Transaction t3 = checkNotNull(wallet.sendCoinsOffline(req));
         assertNull(outbound(p1));  // Nothing sent.
         // Add the wallet to the peer group (simulate initialization). Transactions should be announced.
         peerGroup.addWallet(wallet);
         // Transaction announced to the first peer.
-        InventoryMessage inv1 = (InventoryMessage) outbound(p1);
-        // Filter is still the same as it was, so it is not rebroadcast
-        assertEquals(t3.getHash(), inv1.getItems().get(0).hash);
-        // Peer asks for the transaction, and get it.
-        GetDataMessage getdata = new GetDataMessage(params);
-        getdata.addItem(inv1.getItems().get(0));
-        inbound(p1, getdata);
-        Transaction t4 = (Transaction) outbound(p1);
-        assertEquals(t3, t4);
-
-        FakeChannel p3 = connectPeer(3);
-        assertTrue(outbound(p3) instanceof InventoryMessage);
-        control.verify();
+        assertEquals(t3.getHash(), ((Transaction) outbound(p1)).getHash());
     }
 
     @Test
     public void testWalletCatchupTime() throws Exception {
-        // Check the fast catchup time was initialized to something around the current runtime. The wallet was
-        // already added to the peer in setup.
-        long time = new Date().getTime() / 1000;
-        assertTrue(peerGroup.getFastCatchupTimeSecs() > time - 10000);
+        // Check the fast catchup time was initialized to something around the current runtime minus a week.
+        // The wallet was already added to the peer in setup.
+        final int WEEK = 86400 * 7;
+        final long now = Utils.now().getTime() / 1000;
+        assertTrue(peerGroup.getFastCatchupTimeSecs() > now - WEEK - 10000);
         Wallet w2 = new Wallet(params);
         ECKey key1 = new ECKey();
-        key1.setCreationTimeSeconds(time - 86400);  // One day ago.
+        key1.setCreationTimeSeconds(now - 86400);  // One day ago.
         w2.addKey(key1);
         peerGroup.addWallet(w2);
         Threading.waitForUserCode();
-        assertEquals(peerGroup.getFastCatchupTimeSecs(), time - 86400);
+        assertEquals(peerGroup.getFastCatchupTimeSecs(), now - 86400 - WEEK);
         // Adding a key to the wallet should update the fast catchup time.
         ECKey key2 = new ECKey();
-        key2.setCreationTimeSeconds(time - 100000);
+        key2.setCreationTimeSeconds(now - 100000);
         w2.addKey(key2);
         Threading.waitForUserCode();
-        assertEquals(peerGroup.getFastCatchupTimeSecs(), time - 100000);
+        assertEquals(peerGroup.getFastCatchupTimeSecs(), now - WEEK - 100000);
     }
 
     @Test

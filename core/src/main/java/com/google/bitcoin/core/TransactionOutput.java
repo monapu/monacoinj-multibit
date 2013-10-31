@@ -29,6 +29,7 @@ import java.io.OutputStream;
 import java.io.Serializable;
 import java.math.BigInteger;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 /**
@@ -107,6 +108,10 @@ public class TransactionOutput extends ChildMessage implements Serializable, IsM
 
     public TransactionOutput(NetworkParameters params, Transaction parent, BigInteger value, byte[] scriptBytes) {
         super(params);
+        // Negative values obviously make no sense, except for -1 which is used as a sentinel value when calculating
+        // SIGHASH_SINGLE signatures, so unfortunately we have to allow that here.
+        checkArgument(value.compareTo(BigInteger.ZERO) >= 0 || value.equals(Utils.NEGATIVE_ONE), "Negative values not allowed");
+        checkArgument(value.compareTo(NetworkParameters.MAX_MONEY) < 0, "Values larger than MAX_MONEY not allowed");
         this.value = value;
         this.scriptBytes = scriptBytes;
         parentTransaction = parent;

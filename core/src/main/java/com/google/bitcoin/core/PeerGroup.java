@@ -402,7 +402,9 @@ public class PeerGroup extends AbstractIdleService implements TransactionBroadca
         // Note that the default here means that no tx invs will be received if no wallet is ever added
         lock.lock();
         try {
-            ver.relayTxesBeforeFilter = chain != null && chain.shouldVerifyTransactions() && peerFilterProviders.size() > 0;
+			boolean spvMode = chain != null && !chain.shouldVerifyTransactions();
+			boolean willSendFilter = spvMode && peerFilterProviders.size() > 0;
+			ver.relayTxesBeforeFilter = !willSendFilter;
         } finally {
             lock.unlock();
         }
@@ -622,9 +624,6 @@ public class PeerGroup extends AbstractIdleService implements TransactionBroadca
             checkState(!wallets.contains(wallet));
             wallets.add(wallet);
             wallet.setTransactionBroadcaster(this);
-            // TODO: Make wallets announce their own pending transactions.
-            // The only reason it's not done that way now is to try and reduce late, risky changes before 0.10
-            announcePendingWalletTransactions(Collections.singletonList(wallet), peers);
             wallet.addEventListener(walletEventListener);  // TODO: Run this in the current peer thread.
             addPeerFilterProvider(wallet);
         } finally {
@@ -664,6 +663,7 @@ public class PeerGroup extends AbstractIdleService implements TransactionBroadca
         wallets.remove(checkNotNull(wallet));
         peerFilterProviders.remove(wallet);
         wallet.removeEventListener(walletEventListener);
+        wallet.setTransactionBroadcaster(null);
     }
 
     /**
@@ -676,10 +676,10 @@ public class PeerGroup extends AbstractIdleService implements TransactionBroadca
             // Fully verifying mode doesn't use this optimization (it can't as it needs to see all transactions).
             if (chain != null && chain.shouldVerifyTransactions())
                 return;
-            long earliestKeyTime = Long.MAX_VALUE;
+            long earliestKeyTimeSecs = Long.MAX_VALUE;
             int elements = 0;
             for (PeerFilterProvider p : peerFilterProviders) {
-                earliestKeyTime = Math.min(earliestKeyTime, p.getEarliestKeyCreationTime());
+                earliestKeyTimeSecs = Math.min(earliestKeyTimeSecs, p.getEarliestKeyCreationTime());
                 elements += p.getBloomFilterElementCount();
             }
 
@@ -702,8 +702,13 @@ public class PeerGroup extends AbstractIdleService implements TransactionBroadca
                         }
                 }
             }
+            // Now adjust the earliest key time backwards by a week to handle the case of clock drift. This can occur
+            // both in block header timestamps and if the users clock was out of sync when the key was first created
+            // (to within a small amount of tolerance).
+            earliestKeyTimeSecs -= 86400 * 7;
+
             // Do this last so that bloomFilter is already set when it gets called.
-            setFastCatchupTimeSecs(earliestKeyTime);
+            setFastCatchupTimeSecs(earliestKeyTimeSecs);
         } finally {
             lock.unlock();
         }
@@ -862,16 +867,6 @@ public class PeerGroup extends AbstractIdleService implements TransactionBroadca
             }
             // Make sure the peer knows how to upload transactions that are requested from us.
             peer.addEventListener(getDataListener, Threading.SAME_THREAD);
-            // Now tell the peers about any transactions we have which didn't appear in the chain yet. These are not
-            // necessarily spends we created. They may also be transactions broadcast across the network that we saw,
-            // which are relevant to us, and which we therefore wish to help propagate (ie they send us coins).
-            //
-            // Note that this can cause a DoS attack against us if a malicious remote peer knows what keys we own, and
-            // then sends us fake relevant transactions. We'll attempt to relay the bad transactions, our badness score
-            // in the Satoshi client will increase and we'll get disconnected.
-            //
-            // TODO: Find a way to balance the desire to propagate useful transactions against DoS attacks.
-            announcePendingWalletTransactions(wallets, Collections.singletonList(peer));
             // And set up event listeners for clients. This will allow them to find out about new transactions and blocks.
             for (ListenerRegistration<PeerEventListener> registration : peerEventListeners) {
                 peer.addEventListener(registration.listener, registration.executor);
@@ -942,30 +937,6 @@ public class PeerGroup extends AbstractIdleService implements TransactionBroadca
             }
         };
         pingRunnable[0].run();
-    }
-
-    /** Returns true if at least one peer received an inv. */
-    private boolean announcePendingWalletTransactions(List<Wallet> announceWallets,
-                                                      List<Peer> announceToPeers) {
-        checkState(lock.isHeldByCurrentThread());
-        // Build up an inv announcing the hashes of all pending transactions in all our wallets.
-        InventoryMessage inv = new InventoryMessage(params);
-        for (Wallet w : announceWallets) {
-            for (Transaction tx : w.getPendingTransactions()) {
-                inv.addTransaction(tx);
-            }
-        }
-        // Don't send empty inv messages.
-        if (inv.getItems().size() == 0) {
-            return true;
-        }
-        boolean success = false;
-        for (Peer p : announceToPeers) {
-            log.info("{}: Announcing {} pending wallet transactions", p.getAddress(), inv.getItems().size());
-            p.sendMessage(inv);
-            success = true;
-        }
-        return success;
     }
 
     private void setDownloadPeer(Peer peer) {

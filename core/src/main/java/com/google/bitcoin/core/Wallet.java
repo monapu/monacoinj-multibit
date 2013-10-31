@@ -71,6 +71,7 @@ import com.google.bitcoin.wallet.WalletFiles;
 import com.google.common.base.Preconditions;
 
 import com.google.common.collect.*;
+import com.google.common.primitives.Ints;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
@@ -91,8 +92,14 @@ import static com.google.common.base.Preconditions.*;
 
 // To do list:
 //
-// - Make the keychain member protected and switch it to be a hashmap of some kind so key lookup ops are faster.
-// - Refactor how keys are managed to better handle things like deterministic wallets in future.
+// This whole class has evolved over a period of years and needs a ground-up rewrite.
+//
+// - Take all wallet-relevant data out of Transaction and put it into WalletTransaction. Make Transaction immutable.
+// - Only store relevant transaction outputs, don't bother storing the rest of the data.
+// - Split block chain and tx output tracking into a superclass that doesn't have any key or spending related code.
+// - Simplify how transactions are tracked and stored: in particular, have the wallet maintain positioning information
+//   for transactions independent of the transactions themselves, so the timeline can be walked without having to
+//   process and sort every single transaction.
 // - Decompose the class where possible: break logic out into classes that can be customized/replaced by the user.
 //     - [Auto]saving to a backing store
 //     - Key management
@@ -152,6 +159,9 @@ public class Wallet implements Serializable, BlockChainListener, PeerFilterProvi
     final Map<Sha256Hash, Transaction> unspent;
     final Map<Sha256Hash, Transaction> spent;
     final Map<Sha256Hash, Transaction> dead;
+
+    // All transactions together.
+    final Map<Sha256Hash, Transaction> transactions;
 
     // A list of public/private EC keys owned by this user. Access it using addKey[s], hasKey[s] and findPubKeyFromHash.
     private ArrayList<ECKey> keychain;
@@ -281,7 +291,7 @@ public class Wallet implements Serializable, BlockChainListener, PeerFilterProvi
 
     /**
      * This coin selector will select any transaction at all, regardless of where it came from or whether it was
-     * confirmed yet.
+     * confirmed yet. However immature coinbases will not be included (would be a protocol violation).
      */
     public static class AllowUnconfirmedCoinSelector extends DefaultCoinSelector {
         @Override protected boolean shouldSelect(Transaction tx) {
@@ -289,6 +299,8 @@ public class Wallet implements Serializable, BlockChainListener, PeerFilterProvi
         }
 
         private static AllowUnconfirmedCoinSelector instance;
+
+        /** Returns a global static instance of the selector. */
         public static AllowUnconfirmedCoinSelector get() {
             // This doesn't have to be thread safe as the object has no state, so discarded duplicates are harmless.
             if (instance == null)
@@ -337,6 +349,7 @@ public class Wallet implements Serializable, BlockChainListener, PeerFilterProvi
         spent = new HashMap<Sha256Hash, Transaction>();
         pending = new HashMap<Sha256Hash, Transaction>();
         dead = new HashMap<Sha256Hash, Transaction>();
+        transactions = new HashMap<Sha256Hash, Transaction>();
         eventListeners = new CopyOnWriteArrayList<ListenerRegistration<WalletEventListener>>();
         extensions = new HashMap<String, WalletExtension>();
         
@@ -660,13 +673,16 @@ public class Wallet implements Serializable, BlockChainListener, PeerFilterProvi
      * block might change which chain is best causing a reorganize. A re-org can totally change our balance!
      */
     public void notifyTransactionIsInBlock(Sha256Hash txHash, StoredBlock block,
-                                           BlockChain.NewBlockType blockType) throws VerificationException {
+                                           BlockChain.NewBlockType blockType,
+                                           int relativityOffset) throws VerificationException {
         lock.lock();
         try {
-            Transaction tx = pending.get(txHash);
-            if (tx == null)
+            Transaction tx = transactions.get(txHash);
+            if (tx == null) {
+                log.error("TX {} not found despite being sent to wallet", txHash);
                 return;
-            receive(tx, block, blockType);
+            }
+            receive(tx, block, blockType, relativityOffset);
         } finally {
             lock.unlock();
         }
@@ -883,11 +899,13 @@ public class Wallet implements Serializable, BlockChainListener, PeerFilterProvi
      * inactive side chain. We must still record these transactions and the blocks they appear in because a future
      * block might change which chain is best causing a reorganize. A re-org can totally change our balance!
      */
+    @Override
     public void receiveFromBlock(Transaction tx, StoredBlock block,
-                                 BlockChain.NewBlockType blockType) throws VerificationException {
+                                 BlockChain.NewBlockType blockType,
+                                 int relativityOffset) throws VerificationException {
         lock.lock();
         try {
-            receive(tx, block, blockType);
+            receive(tx, block, blockType, relativityOffset);
         } finally {
             lock.unlock();
         }
@@ -898,7 +916,8 @@ public class Wallet implements Serializable, BlockChainListener, PeerFilterProvi
         }
     }
 
-    private void receive(Transaction tx, StoredBlock block, BlockChain.NewBlockType blockType) throws VerificationException {
+    private void receive(Transaction tx, StoredBlock block, BlockChain.NewBlockType blockType,
+                         int relativityOffset) throws VerificationException {
         // Runs in a peer thread.
         checkState(lock.isHeldByCurrentThread());
         BigInteger prevBalance = getBalance();
@@ -910,8 +929,8 @@ public class Wallet implements Serializable, BlockChainListener, PeerFilterProvi
         BigInteger valueSentToMe = tx.getValueSentToMe(this);
         BigInteger valueDifference = valueSentToMe.subtract(valueSentFromMe);
 
-        log.info("Received tx {} for {} BTC: {} in block {}", new Object[]{sideChain ? "on a side chain" : "",
-                bitcoinValueToFriendlyString(valueDifference), tx.getHashAsString(),
+        log.info("Received tx{} for {} BTC: {} [{}] in block {}", new Object[]{sideChain ? " on a side chain" : "",
+                bitcoinValueToFriendlyString(valueDifference), tx.getHashAsString(), relativityOffset,
                 block != null ? block.getHeader().getHash() : "(unit test)"});
 
         // If the transaction is being replayed no need to add it to the wallet again.
@@ -952,13 +971,15 @@ public class Wallet implements Serializable, BlockChainListener, PeerFilterProvi
 
         // If this transaction is already in the wallet we may need to move it into a different pool. At the very
         // least we need to ensure we're manipulating the canonical object rather than a duplicate.
-        Transaction wtx;
-        if ((wtx = pending.remove(txHash)) != null) {
-            log.info("  <-pending");
-            // Make sure "tx" is always the canonical object we want to manipulate, send to event handlers, etc.
-            tx = wtx;
+        {
+            Transaction tmp = transactions.get(tx.getHash());
+            if (tmp != null)
+                tx = tmp;
         }
-        boolean wasPending = wtx != null;
+
+        boolean wasPending = pending.remove(txHash) != null;
+        if (wasPending)
+            log.info("  <-pending");
 
         if (bestChain) {
             if (wasPending) {
@@ -978,6 +999,7 @@ public class Wallet implements Serializable, BlockChainListener, PeerFilterProvi
             if (wasPending) {
                 // Just put it back in without touching the connections or confidence.
                 addWalletTransaction(Pool.PENDING, tx);
+                log.info("  ->pending");
             } else {
                 // Ignore the case where a tx appears on a side chain at the same time as the best chain (this is
                 // quite normal and expected).
@@ -993,7 +1015,7 @@ public class Wallet implements Serializable, BlockChainListener, PeerFilterProvi
         if (block != null) {
             // Mark the tx as appearing in this block so we can find it later after a re-org. This also tells the tx
             // confidence object about the block and sets its work done/depth appropriately.
-            tx.setBlockAppearance(block, bestChain);
+            tx.setBlockAppearance(block, bestChain, relativityOffset);
             if (bestChain) {
                 // Don't notify this tx of work done in notifyNewBestBlock which will be called immediately after
                 // this method has been called by BlockChain for all relevant transactions. Otherwise we'd double
@@ -1462,6 +1484,7 @@ public class Wallet implements Serializable, BlockChainListener, PeerFilterProvi
      */
     private void addWalletTransaction(Pool pool, Transaction tx) {
         checkState(lock.isHeldByCurrentThread());
+        transactions.put(tx.getHash(), tx);
         switch (pool) {
         case UNSPENT:
             unspent.put(tx.getHash(), tx);
@@ -1534,19 +1557,11 @@ public class Wallet implements Serializable, BlockChainListener, PeerFilterProvi
     /**
      * Returns a transaction object given its hash, if it exists in this wallet, or null otherwise.
      */
+    @Nullable
     public Transaction getTransaction(Sha256Hash hash) {
         lock.lock();
         try {
-            Transaction tx;
-            if ((tx = pending.get(hash)) != null)
-                return tx;
-            else if ((tx = unspent.get(hash)) != null)
-                return tx;
-            else if ((tx = spent.get(hash)) != null)
-                return tx;
-            else if ((tx = dead.get(hash)) != null)
-                return tx;
-            return null;
+            return transactions.get(hash);
         } finally {
             lock.unlock();
         }
@@ -1564,7 +1579,7 @@ public class Wallet implements Serializable, BlockChainListener, PeerFilterProvi
                 spent.clear();
                 pending.clear();
                 dead.clear();
-
+                transactions.clear();
                 //saveLater();
             } else {
                 throw new UnsupportedOperationException();
@@ -1789,7 +1804,11 @@ public class Wallet implements Serializable, BlockChainListener, PeerFilterProvi
      * {@link Wallet#getChangeAddress()}, so you must have added at least one key.</p>
      *
      * <p>If you just want to send money quickly, you probably want
+<<<<<<< HEAD
      * Wallet#sendCoins(PeerGroup, Address, java.math.BigInteger) instead. That will create the sending
+=======
+     * {@link Wallet#sendCoins(TransactionBroadcaster, Address, java.math.BigInteger)} instead. That will create the sending
+>>>>>>> v0.10.2
      * transaction, commit to the wallet and broadcast it to the network all in one go. This method is lower level
      * and lets you see the proposed transaction before anything is done with it.</p>
      *
@@ -2418,6 +2437,20 @@ public class Wallet implements Serializable, BlockChainListener, PeerFilterProvi
         }
     }
 
+    private static class TxOffsetPair implements Comparable<TxOffsetPair> {
+        public final Transaction tx;
+        public final int offset;
+
+        public TxOffsetPair(Transaction tx, int offset) {
+            this.tx = tx;
+            this.offset = offset;
+        }
+
+        @Override public int compareTo(TxOffsetPair o) {
+            return Ints.compare(offset, o.offset);
+        }
+    }
+
     /**
      * <p>Don't call this directly. It's not intended for API users.</p>
      *
@@ -2450,14 +2483,17 @@ public class Wallet implements Serializable, BlockChainListener, PeerFilterProvi
             checkState(onWalletChangedSuppressions == 0);
             onWalletChangedSuppressions++;
 
-            // Map block hash to transactions that appear in it.
-            Multimap<Sha256Hash, Transaction> mapBlockTx = ArrayListMultimap.create();
+            // Map block hash to transactions that appear in it. We ensure that the map values are sorted according
+            // to their relative position within those blocks.
+            ArrayListMultimap<Sha256Hash, TxOffsetPair> mapBlockTx = ArrayListMultimap.create();
             for (Transaction tx : getTransactions(true)) {
-                Collection<Sha256Hash> appearsIn = tx.getAppearsInHashes();
+                Map<Sha256Hash, Integer> appearsIn = tx.getAppearsInHashes();
                 if (appearsIn == null) continue;  // Pending.
-                for (Sha256Hash block : appearsIn)
-                    mapBlockTx.put(block, tx);
+                for (Map.Entry<Sha256Hash, Integer> block : appearsIn.entrySet())
+                    mapBlockTx.put(block.getKey(), new TxOffsetPair(tx, block.getValue()));
             }
+            for (Sha256Hash blockHash : mapBlockTx.keySet())
+                Collections.sort(mapBlockTx.get(blockHash));
 
             List<Sha256Hash> oldBlockHashes = new ArrayList<Sha256Hash>(oldBlocks.size());
             log.info("Old part of chain (top to bottom):");
@@ -2472,12 +2508,11 @@ public class Wallet implements Serializable, BlockChainListener, PeerFilterProvi
 
             Collections.reverse(newBlocks);  // Need bottom-to-top but we get top-to-bottom.
 
-            // For each block in the old chain, disconnect the transactions. It doesn't matter if
-            // we don't do it in the exact ordering they appeared in the chain, all we're doing is ensuring all
-            // the outputs are freed up so we can connect them back again in the next step.
+            // For each block in the old chain, disconnect the transactions in reverse order.
             LinkedList<Transaction> oldChainTxns = Lists.newLinkedList();
             for (Sha256Hash blockHash : oldBlockHashes) {
-                for (Transaction tx : mapBlockTx.get(blockHash)) {
+                for (TxOffsetPair pair : mapBlockTx.get(blockHash)) {
+                    Transaction tx = pair.tx;
                     final Sha256Hash txHash = tx.getHash();
                     if (tx.isCoinBase()) {
                         log.warn("Coinbase tx {} -> dead", tx.getHash());
@@ -2549,10 +2584,10 @@ public class Wallet implements Serializable, BlockChainListener, PeerFilterProvi
             // conflict.
             for (StoredBlock block : newBlocks) {
                 log.info("Replaying block {}", block.getHeader().getHashAsString());
-                for (Transaction tx : mapBlockTx.get(block.getHeader().getHash())) {
-                    log.info("  tx {}", tx.getHash());
+                for (TxOffsetPair pair : mapBlockTx.get(block.getHeader().getHash())) {
+                    log.info("  tx {}", pair.tx.getHash());
                     try {
-                        receive(tx, block, BlockChain.NewBlockType.BEST_CHAIN);
+                        receive(pair.tx, block, BlockChain.NewBlockType.BEST_CHAIN, pair.offset);
                     } catch (ScriptException e) {
                         throw new RuntimeException(e);  // Cannot happen as these blocks were already verified.
                     }
@@ -3560,7 +3595,24 @@ public class Wallet implements Serializable, BlockChainListener, PeerFilterProvi
      * optimise itself to reduce fees or improve privacy.</p>
      */
     public void setTransactionBroadcaster(@Nullable com.google.bitcoin.core.TransactionBroadcaster broadcaster) {
-        vTransactionBroadcaster = broadcaster;
+        lock.lock();
+        try {
+            if (vTransactionBroadcaster == broadcaster)
+                return;
+            vTransactionBroadcaster = broadcaster;
+            if (broadcaster == null)
+                return;
+            // Now use it to upload any pending transactions we have that are marked as not being seen by any peers yet.
+            for (Transaction tx : pending.values()) {
+                checkState(tx.getConfidence().getConfidenceType() == ConfidenceType.PENDING);
+                if (tx.getConfidence().numBroadcastPeers() == 0) {
+                    log.info("New broadcaster so uploading waiting tx {}", tx.getHash());
+                    broadcaster.broadcastTransaction(tx);
+                }
+            }
+        } finally {
+            lock.unlock();
+        }
     }
 
     /**
