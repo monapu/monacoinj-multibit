@@ -16,20 +16,18 @@
 
 package com.google.bitcoin.core;
 
+import com.google.bitcoin.IsMultiBitClass;
 import com.google.bitcoin.utils.Threading;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.Serializable;
 import java.math.BigInteger;
 import java.util.ListIterator;
 import java.util.concurrent.CopyOnWriteArrayList;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import com.google.bitcoin.IsMultiBitClass;
 
 /**
  * <p>A TransactionConfidence object tracks data you can use to make a confidence decision about a transaction.
@@ -207,10 +205,8 @@ public class TransactionConfidence implements Serializable, IsMultiBitClass {
      * confidence object to determine the new depth.</p>
      */
     public void addEventListener(Listener listener) {
-        // System.out.println("TransactionConfidence#addEventListener adding listener " + listener);
         Preconditions.checkNotNull(listener);
         listeners.addIfAbsent(listener);
-        // System.out.println("TransactionConfidence#addEventListener number of listeners = " + listeners.size());
     }
 
     public void removeEventListener(Listener listener) {
@@ -420,7 +416,7 @@ public class TransactionConfidence implements Serializable, IsMultiBitClass {
             return c;
         }
     }
-        
+
     /**
      * Call this after adjusting the confidence, for cases where listeners should be notified. This has to be done
      * explicitly rather than being done automatically because sometimes complex changes to transaction states can

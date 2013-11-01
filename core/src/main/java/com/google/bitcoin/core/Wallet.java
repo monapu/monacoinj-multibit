@@ -16,46 +16,6 @@
 
 package com.google.bitcoin.core;
 
-import static com.google.bitcoin.core.Utils.bitcoinValueToFriendlyString;
-import static com.google.common.base.Preconditions.checkArgument;
-import static com.google.common.base.Preconditions.checkNotNull;
-import static com.google.common.base.Preconditions.checkState;
-
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.ObjectInputStream;
-import java.io.OutputStream;
-import java.io.Serializable;
-import java.math.BigInteger;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.Date;
-import java.util.EnumSet;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Set;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.locks.ReentrantLock;
-
-import org.bitcoinj.wallet.Protos.Wallet.EncryptionType;
-import org.multibit.store.MultiBitWalletExtension;
-import org.multibit.store.MultiBitWalletProtobufSerializer;
-import org.multibit.store.MultiBitWalletVersion;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.spongycastle.crypto.params.KeyParameter;
-
 import com.google.bitcoin.IsMultiBitClass;
 import com.google.bitcoin.core.TransactionConfidence.ConfidenceType;
 import com.google.bitcoin.core.WalletTransaction.Pool;
@@ -69,19 +29,30 @@ import com.google.bitcoin.utils.Threading;
 import com.google.bitcoin.wallet.KeyTimeCoinSelector;
 import com.google.bitcoin.wallet.WalletFiles;
 import com.google.common.base.Preconditions;
-
-import com.google.common.collect.*;
+import com.google.common.collect.ArrayListMultimap;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Iterables;
+import com.google.common.collect.Lists;
 import com.google.common.primitives.Ints;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
+import org.bitcoinj.wallet.Protos.Wallet.EncryptionType;
+import org.multibit.store.MultiBitWalletExtension;
+import org.multibit.store.MultiBitWalletProtobufSerializer;
+import org.multibit.store.MultiBitWalletVersion;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.spongycastle.crypto.params.KeyParameter;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.GuardedBy;
+import java.io.*;
+import java.math.BigInteger;
 import java.util.*;
-
+import java.util.Map.Entry;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
@@ -402,7 +373,7 @@ public class Wallet implements Serializable, BlockChainListener, PeerFilterProvi
     public void setNetworkParameters(NetworkParameters params) {
         this.params = params;
     }
-    
+
     /** Returns the parameters this wallet was created with. */
     public NetworkParameters getParams() {
         return params;
@@ -490,7 +461,6 @@ public class Wallet implements Serializable, BlockChainListener, PeerFilterProvi
             stream.getFD().sync();
             stream.close();
             stream = null;
-
             if (Utils.isWindows()) {
                 // Work around an issue on Windows whereby you can't rename over existing files.
                 File canonical = destFile.getCanonicalFile();
@@ -731,9 +701,8 @@ public class Wallet implements Serializable, BlockChainListener, PeerFilterProvi
             }
             // Repeat the check of relevancy here, even though the caller may have already done so - this is to avoid
             // race conditions where receivePending may be being called in parallel.
-            if (!overrideIsRelevant && !isPendingTransactionRelevant(tx)) {
+            if (!overrideIsRelevant && !isPendingTransactionRelevant(tx))
                 return;
-            }
             AnalysisResult analysis = analyzeTransactionAndDependencies(tx, dependencies);
             if (analysis.timeLocked != null && !doesAcceptTimeLockedTransactions()) {
                 log.warn("Transaction {}, dependency of {} has a time lock value of {}", new Object[]{
@@ -803,7 +772,7 @@ public class Wallet implements Serializable, BlockChainListener, PeerFilterProvi
             // between pools.
             EnumSet<Pool> containingPools = getContainingPools(tx);
             if (!containingPools.equals(EnumSet.noneOf(Pool.class))) {
-                log.debug("Received tx we already saw in a block or created ourselves: " + tx.getHashAsString() + ", identityHashCode = " + System.identityHashCode(tx));
+                log.debug("Received tx we already saw in a block or created ourselves: " + tx.getHashAsString());
                 return false;
             }
 
@@ -835,7 +804,6 @@ public class Wallet implements Serializable, BlockChainListener, PeerFilterProvi
      * <p>Note that if the tx has inputs containing one of our keys, but the connected transaction is not in the wallet,
      * it will not be considered relevant.</p>
      */
-    @Override
     public boolean isTransactionRelevant(Transaction tx) throws ScriptException {
         lock.lock();
         try {
@@ -1349,14 +1317,6 @@ public class Wallet implements Serializable, BlockChainListener, PeerFilterProvi
     }
 
     /**
-     * <p>Updates the wallet with the given transaction: puts it into the pending pool, sets the spent flags and runs
-     * the onCoinsSent/onCoinsReceived event listener. Used in two situations:</p>
-     *
-     * <ol>
-     *     <li>When we have just successfully transmitted the tx we created to the network.</li>
-     *     <li>When we receive a pending transaction that didn't appear in the chain yet, and we did not create it.</li>
-     * </ol>
-     *
      * Calls {@link Wallet#commitTx} if tx is not already in the pending pool
      *
      * @return true if the tx was added to the wallet, or false if it was already in the pending pool
@@ -1507,7 +1467,6 @@ public class Wallet implements Serializable, BlockChainListener, PeerFilterProvi
         // This is safe even if the listener has been added before, as TransactionConfidence ignores duplicate
         // registration requests. That makes the code in the wallet simpler.
         tx.getConfidence().addEventListener(txConfidenceListener);
-        // log.debug("Added txConfidenceListener " + txConfidenceListener + " to tx " + tx.getHashAsString() + ", identityHashCode = " + System.identityHashCode(tx));
     }
 
     /**
@@ -1804,11 +1763,7 @@ public class Wallet implements Serializable, BlockChainListener, PeerFilterProvi
      * {@link Wallet#getChangeAddress()}, so you must have added at least one key.</p>
      *
      * <p>If you just want to send money quickly, you probably want
-<<<<<<< HEAD
-     * Wallet#sendCoins(PeerGroup, Address, java.math.BigInteger) instead. That will create the sending
-=======
      * {@link Wallet#sendCoins(TransactionBroadcaster, Address, java.math.BigInteger)} instead. That will create the sending
->>>>>>> v0.10.2
      * transaction, commit to the wallet and broadcast it to the network all in one go. This method is lower level
      * and lets you see the proposed transaction before anything is done with it.</p>
      *
@@ -1859,7 +1814,6 @@ public class Wallet implements Serializable, BlockChainListener, PeerFilterProvi
             // log.debug("Added txConfidenceListener " + txConfidenceListener + " to tx " + request.tx.getHashAsString() + ", identityHashCode = " + System.identityHashCode(request.tx));
 
             commitTx(request.tx);
-             
             return request.tx;
         } catch (VerificationException e) {
             throw new RuntimeException(e);  // Cannot happen unless there's a bug, as we just created this ourselves.
@@ -1923,7 +1877,6 @@ public class Wallet implements Serializable, BlockChainListener, PeerFilterProvi
             return null;  // Not enough money.
         SendResult result = new SendResult();
         result.tx = tx;
-        
         // The tx has been committed to the pending pool by this point (via sendCoinsOffline -> commitTx), so it has
         // a txConfidenceListener registered. Once the tx is broadcast the peers will update the memory pool with the
         // count of seen peers, the memory pool will update the transaction confidence object, that will invoke the
@@ -2100,7 +2053,6 @@ public class Wallet implements Serializable, BlockChainListener, PeerFilterProvi
             // transaction lists more appropriately, especially when the wallet starts to generate transactions itself
             // for internal purposes.
             req.tx.setPurpose(Transaction.Purpose.USER_PAYMENT);
-
             req.completed = true;
             req.fee = calculatedFee;
             log.info("  completed: {}", req.tx);
@@ -3226,7 +3178,6 @@ public class Wallet implements Serializable, BlockChainListener, PeerFilterProvi
             if (extensions.containsKey(id))
                 throw new IllegalStateException("Cannot add two extensions with the same ID: " + id);
             extensions.put(id, extension);
-
             //saveNow();
         } finally {
             lock.unlock();
@@ -3244,7 +3195,6 @@ public class Wallet implements Serializable, BlockChainListener, PeerFilterProvi
             if (previousExtension != null)
                 return previousExtension;
             extensions.put(id, extension);
-
             //saveNow();
             return extension;
         } finally {
