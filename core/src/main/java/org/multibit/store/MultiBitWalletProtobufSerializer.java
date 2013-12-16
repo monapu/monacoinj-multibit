@@ -337,7 +337,7 @@ public class MultiBitWalletProtobufSerializer extends WalletProtobufSerializer {
         try {
             Protos.Wallet walletProto = parseToProto(input);
 
-            // System.out.println(TextFormat.printToString(walletProto));
+            //System.out.println(TextFormat.printToString(walletProto));
 
             // Read the scrypt parameters that specify how encryption and
             // decryption is performed.

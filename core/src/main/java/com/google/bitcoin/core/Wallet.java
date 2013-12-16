@@ -1209,7 +1209,10 @@ public class Wallet implements Serializable, BlockChainListener, PeerFilterProvi
                     TransactionInput.ConnectionResult result = input.connect(tx, TransactionInput.ConnectMode.ABORT_ON_CONFLICT);
                     // This TX is supposed to have just appeared on the best chain, so its outputs should not be marked
                     // as spent yet. If they are, it means something is happening out of order.
-                    checkState(result != TransactionInput.ConnectionResult.ALREADY_SPENT);
+                    //
+                    // (Commented out as this can happen if you have a pending tx which spends this and you are doing a replay.
+                    // You get the spending pending tx before the one from the block).
+                    // checkState(result != TransactionInput.ConnectionResult.ALREADY_SPENT);
                     if (result == TransactionInput.ConnectionResult.SUCCESS) {
                         log.info("Connected pending tx input {}:{}",
                                 pendingTx.getHashAsString(), pendingTx.getInputs().indexOf(input));
