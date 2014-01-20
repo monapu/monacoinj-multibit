@@ -1235,10 +1235,6 @@ public class PeerGroup extends AbstractIdleService implements TransactionBroadca
                             }
                         }
                         
-                        // Add the tx to the memory pool so that it is the canonical object that has
-                        // transaction confidence, and listeners, set up.
-                        memoryPool.seen(pinnedTx, somePeer.getAddress());
-                        
                         // We're done! It's important that the PeerGroup lock is not held (by this thread) at this
                         // point to avoid triggering inversions when the Future completes.
                         log.info("broadcastTransaction: {} complete", pinnedTx.getHashAsString());
