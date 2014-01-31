@@ -197,7 +197,6 @@ public class Wallet implements Serializable, BlockChainListener, PeerFilterProvi
      */
     public static class DefaultCoinSelector implements CoinSelector {
         public CoinSelection select(BigInteger biTarget, LinkedList<TransactionOutput> candidates) {
-            long target = biTarget.longValue();
             HashSet<TransactionOutput> selected = new HashSet<TransactionOutput>();
             // Sort the inputs by age*value so we get the highest "coindays" spent.
             // TODO: Consider changing the wallets internal format to track just outputs and keep them ordered.
@@ -231,17 +230,17 @@ public class Wallet implements Serializable, BlockChainListener, PeerFilterProvi
             }
             // Now iterate over the sorted outputs until we have got as close to the target as possible or a little
             // bit over (excessive value will be change).
-            long total = 0;
+            BigInteger biTotal = BigInteger.ZERO;
             for (TransactionOutput output : sortedOutputs) {
-                if (total >= target) break;
+                if (biTotal.compareTo(biTarget) >= 0) break;
                 // Only pick chain-included transactions, or transactions that are ours and pending.
                 if (!shouldSelect(output.parentTransaction)) continue;
                 selected.add(output);
-                total += output.getValue().longValue();
+                biTotal = biTotal.add(output.getValue());
             }
             // Total may be lower than target here, if the given candidates were insufficient to create to requested
             // transaction.
-            return new CoinSelection(BigInteger.valueOf(total), selected);
+            return new CoinSelection(biTotal, selected);
         }
 
         /** Sub-classes can override this to just customize whether transactions are usable, but keep age sorting. */
