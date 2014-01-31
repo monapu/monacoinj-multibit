@@ -24,7 +24,7 @@
 
 package paymentchannels;
 
-option java_package = "org.bitcoin.paymentchannel";
+option java_package = "org.dogecoin.paymentchannel";
 option java_outer_classname = "Protos";
 
 

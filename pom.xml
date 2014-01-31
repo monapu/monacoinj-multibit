@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
 
   <groupId>com.google</groupId>
-  <artifactId>bitcoinj-parent</artifactId>
+  <artifactId>dogecoinj-parent</artifactId>
   <version>0.10.3-MB-ALICE</version>
   <packaging>pom</packaging>
 
@@ -13,13 +13,9 @@
     <module>tools</module>
   </modules>
 
-  <name>bitcoinj Parent</name>
-  <description>Provides the common configuration for the BitCoinJ modules</description>
-  <url>http://code.google.com/p/bitcoinj</url>
-
-  <ciManagement>
-    <url>http://ci.bitcoinj.org/</url>
-  </ciManagement>
+  <name>dogecoinj Parent</name>
+  <description>Provides the common configuration for the Dogecoinj modules</description>
+  <url>https://github.com/langerhans/dogecoinj-new</url>
 
   <licenses>
     <license>
@@ -31,32 +27,32 @@
   </licenses>
 
   <issueManagement>
-    <system>Google Code</system>
-    <url>http://code.google.com/p/bitcoinj/issues/list</url>
+    <system>GitHub</system>
+    <url>https://github.com/langerhans/dogecoinj-new/issues</url>
   </issueManagement>
 
-  <mailingLists>
+<!--  <mailingLists>
     <mailingList>
-      <name>bitcoinj Google Group</name>
-      <post>https://groups.google.com/forum/#!forum/bitcoinj</post>
+      <name>dogecoinj Google Group</name>
+      <post>https://groups.google.com/forum/#!forum/dogecoinj</post>
     </mailingList>
-  </mailingLists>
+  </mailingLists>-->
 
   <distributionManagement>
     <repository>
-        <id>bitcoinj-distribution</id>
-        <url>https://distribution.bitcoinj.googlecode.com/git/releases</url>
+        <id>dogecoinj-distribution</id>
+        <url>https://github.com/langerhans/dogecoinj-new</url>
     </repository>
   </distributionManagement>
 
   <scm>
-    <url>http://code.google.com/p/bitcoinj/source/checkout</url>
+    <url>https://github.com/langerhans/dogecoinj-new</url>
   </scm>
 
   <!-- Common build plugin configuration -->
   <build>
         <plugins>
-          <!-- Ensure compilation is done under Java 5 for backwards compatibility -->
+          <!-- Ensure compilation is done under Java 6 for backwards compatibility -->
           <plugin>
             <groupId>org.apache.maven.plugins</groupId>
             <artifactId>maven-compiler-plugin</artifactId>

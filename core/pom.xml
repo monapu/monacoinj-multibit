@@ -21,14 +21,14 @@
     <modelVersion>4.0.0</modelVersion>
     <parent>
         <groupId>com.google</groupId>
-        <artifactId>bitcoinj-parent</artifactId>
+        <artifactId>dogecoinj-parent</artifactId>
         <version>0.10.3-MB-ALICE</version>
     </parent>
 
-    <artifactId>bitcoinj</artifactId>
+    <artifactId>dogecoinj</artifactId>
 
-    <name>bitcoinj</name>
-    <description>A Java Bitcoin library</description>
+    <name>dogecoinj</name>
+    <description>A Java Dogecoin library</description>
 
     <profiles>
         <profile>
