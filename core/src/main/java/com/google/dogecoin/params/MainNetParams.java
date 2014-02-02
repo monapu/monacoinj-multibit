@@ -31,9 +31,9 @@ public class MainNetParams extends NetworkParameters {
         interval = INTERVAL;
         targetTimespan = TARGET_TIMESPAN;
         proofOfWorkLimit = Utils.decodeCompactBits(0x1e0fffffL);
-        acceptableAddressCodes = new int[] { addressHeader };
         dumpedPrivateKeyHeader = 158; //This is always addressHeader + 128
         addressHeader = 30;
+        acceptableAddressCodes = new int[] { addressHeader };
         port = 22556;
         packetMagic = 0xc0c0c0c0;
         genesisBlock.setDifficultyTarget(0x1e0ffff0L);
