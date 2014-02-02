@@ -3464,7 +3464,7 @@ public class Wallet implements Serializable, BlockChainListener, PeerFilterProvi
                     // If we are in selection2, we will require at least CENT additional. If we do that, there is no way
                     // we can end up back here because CENT additional will always get us to 1
                     checkState(selection2 == null);
-                    checkState(additionalValueForNextCategory.equals(Utils.CENT));
+                    checkState(additionalValueForNextCategory.equals(Utils.COIN));
                     selection2 = selection;
                     selection2Change = checkNotNull(changeOutput); // If we get no change in category 2, we are actually in category 3
                 } else {
