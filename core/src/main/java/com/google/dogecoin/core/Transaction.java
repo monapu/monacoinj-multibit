@@ -656,7 +656,7 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
                 }
                 s.append(" ");
                 s.append(bitcoinValueToPlainString(out.getValue()));
-                s.append(" BTC");
+                s.append(" DOGE");
                 if (!out.isAvailableForSpending()) {
                     s.append(" Spent");
                 }
