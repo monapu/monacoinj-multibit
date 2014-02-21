@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.utils;
+package com.google.monacoin.utils;
 
 import com.google.common.util.concurrent.Callables;
 import com.google.common.util.concurrent.CycleDetectingLockFactory;

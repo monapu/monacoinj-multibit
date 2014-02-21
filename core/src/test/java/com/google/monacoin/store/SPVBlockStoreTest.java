@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.store;
+package com.google.monacoin.store;
 
-import com.google.dogecoin.core.Address;
-import com.google.dogecoin.core.ECKey;
-import com.google.dogecoin.core.NetworkParameters;
-import com.google.dogecoin.core.StoredBlock;
-import com.google.dogecoin.params.UnitTestParams;
+import com.google.monacoin.core.Address;
+import com.google.monacoin.core.ECKey;
+import com.google.monacoin.core.NetworkParameters;
+import com.google.monacoin.core.StoredBlock;
+import com.google.monacoin.params.UnitTestParams;
 import org.junit.Test;
 
 import java.io.File;

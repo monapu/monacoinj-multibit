@@ -14,19 +14,19 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.utils;
+package com.google.monacoin.utils;
 
-import com.google.dogecoin.core.*;
-import com.google.dogecoin.params.UnitTestParams;
-import com.google.dogecoin.store.BlockStore;
-import com.google.dogecoin.store.MemoryBlockStore;
+import com.google.monacoin.core.*;
+import com.google.monacoin.params.UnitTestParams;
+import com.google.monacoin.store.BlockStore;
+import com.google.monacoin.store.MemoryBlockStore;
 
 import java.io.IOException;
 import java.math.BigInteger;
 import java.util.ArrayList;
 
-import static com.google.dogecoin.utils.TestUtils.createFakeBlock;
-import static com.google.dogecoin.utils.TestUtils.createFakeTx;
+import static com.google.monacoin.utils.TestUtils.createFakeBlock;
+import static com.google.monacoin.utils.TestUtils.createFakeTx;
 
 /**
  * A utility class that you can derive from in your unit tests. TestWithWallet sets up a wallet with a key,

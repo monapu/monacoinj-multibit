@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.discovery;
+package com.google.monacoin.discovery;
 
 import java.net.InetSocketAddress;
 import java.util.concurrent.TimeUnit;

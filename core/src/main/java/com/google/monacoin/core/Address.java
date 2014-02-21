@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.core;
+package com.google.monacoin.core;
 
-import com.google.dogecoin.params.MainNetParams;
-import com.google.dogecoin.params.TestNet3Params;
+import com.google.monacoin.params.MainNetParams;
+import com.google.monacoin.params.TestNet3Params;
 
 import javax.annotation.Nullable;
 

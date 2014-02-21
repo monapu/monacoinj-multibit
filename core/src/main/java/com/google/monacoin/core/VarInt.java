@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.core;
+package com.google.monacoin.core;
 
 import com.google.common.primitives.UnsignedInteger;
 
-import static com.google.dogecoin.core.Utils.isLessThanUnsigned;
+import static com.google.monacoin.core.Utils.isLessThanUnsigned;
 
 /**
  * A variable-length encoded integer using Satoshis encoding.

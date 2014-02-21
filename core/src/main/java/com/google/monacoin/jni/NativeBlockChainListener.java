@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.jni;
+package com.google.monacoin.jni;
 
-import com.google.dogecoin.core.*;
+import com.google.monacoin.core.*;
 
 import java.util.List;
 

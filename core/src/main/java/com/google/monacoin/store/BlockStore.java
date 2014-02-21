@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.store;
+package com.google.monacoin.store;
 
-import com.google.dogecoin.core.Sha256Hash;
-import com.google.dogecoin.core.StoredBlock;
+import com.google.monacoin.core.Sha256Hash;
+import com.google.monacoin.core.StoredBlock;
 
 /**
  * An implementor of BlockStore saves StoredBlock objects to disk. Different implementations store them in
@@ -45,8 +45,8 @@ public interface BlockStore {
 
     /**
      * Returns the {@link StoredBlock} that represents the top of the chain of greatest total work. Note that this
-     * can be arbitrarily expensive, you probably should use {@link com.google.dogecoin.core.BlockChain#getChainHead()}
-     * or perhaps {@link com.google.dogecoin.core.BlockChain#getBestChainHeight()} which will run in constant time and
+     * can be arbitrarily expensive, you probably should use {@link com.google.monacoin.core.BlockChain#getChainHead()}
+     * or perhaps {@link com.google.monacoin.core.BlockChain#getBestChainHeight()} which will run in constant time and
      * not take any heavyweight locks.
      */
     StoredBlock getChainHead() throws BlockStoreException;

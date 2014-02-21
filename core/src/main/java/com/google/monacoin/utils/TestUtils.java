@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.utils;
+package com.google.monacoin.utils;
 
-import com.google.dogecoin.core.*;
-import com.google.dogecoin.store.BlockStore;
-import com.google.dogecoin.store.BlockStoreException;
+import com.google.monacoin.core.*;
+import com.google.monacoin.store.BlockStore;
+import com.google.monacoin.store.BlockStoreException;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;

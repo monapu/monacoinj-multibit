@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.core;
+package com.google.monacoin.core;
 
-import com.google.dogecoin.params.MainNetParams;
+import com.google.monacoin.params.MainNetParams;
 import org.junit.Test;
 import org.spongycastle.util.encoders.Hex;
 
@@ -28,7 +28,7 @@ public class PeerAddressTest
 {
     @Test
     public void testPeerAddressRoundtrip() throws Exception {
-        // copied verbatim from https://en.dogecoin.it/wiki/Protocol_specification#Network_address
+        // copied verbatim from https://en.bitcoin.it/wiki/Protocol_specification#Network_address
         String fromSpec = "010000000000000000000000000000000000ffff0a000001208d";
         PeerAddress pa = new PeerAddress(MainNetParams.get(),
                 Hex.decode(fromSpec), 0, 0);

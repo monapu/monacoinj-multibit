@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.store;
+package com.google.monacoin.store;
 
 /**
  * Thrown when something goes wrong with storing a block. Examples: out of disk space.

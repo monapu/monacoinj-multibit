@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.core;
+package com.google.monacoin.core;
 
 /**
  * Represents the "getaddr" P2P protocol message, which requests network {@link AddressMessage}s from a peer. Not to

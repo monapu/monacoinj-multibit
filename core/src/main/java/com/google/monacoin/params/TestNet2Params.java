@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.params;
+package com.google.monacoin.params;
 
-import com.google.dogecoin.core.NetworkParameters;
-import com.google.dogecoin.core.Utils;
+import com.google.monacoin.core.NetworkParameters;
+import com.google.monacoin.core.Utils;
 
 import static com.google.common.base.Preconditions.checkState;
 

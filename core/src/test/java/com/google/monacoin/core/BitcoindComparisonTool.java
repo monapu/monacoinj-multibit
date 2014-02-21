@@ -14,15 +14,15 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.core;
+package com.google.monacoin.core;
 
-import com.google.dogecoin.params.RegTestParams;
-import com.google.dogecoin.store.BlockStoreException;
-import com.google.dogecoin.store.FullPrunedBlockStore;
-import com.google.dogecoin.store.H2FullPrunedBlockStore;
-import com.google.dogecoin.utils.BlockFileLoader;
-import com.google.dogecoin.utils.BriefLogFormatter;
-import com.google.dogecoin.utils.Threading;
+import com.google.monacoin.params.RegTestParams;
+import com.google.monacoin.store.BlockStoreException;
+import com.google.monacoin.store.FullPrunedBlockStore;
+import com.google.monacoin.store.H2FullPrunedBlockStore;
+import com.google.monacoin.utils.BlockFileLoader;
+import com.google.monacoin.utils.BriefLogFormatter;
+import com.google.monacoin.utils.Threading;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

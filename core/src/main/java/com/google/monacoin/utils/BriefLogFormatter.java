@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.utils;
+package com.google.monacoin.utils;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;

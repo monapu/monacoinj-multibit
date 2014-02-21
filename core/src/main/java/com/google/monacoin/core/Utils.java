@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.core;
+package com.google.monacoin.core;
 
 import com.google.common.base.Charsets;
 import com.google.common.primitives.UnsignedLongs;

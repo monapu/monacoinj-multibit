@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.core;
+package com.google.monacoin.core;
 
 /**
  * Thrown when a problem occurs in communicating with a peer, and we should

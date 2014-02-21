@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.core;
+package com.google.monacoin.core;
 
-import com.google.dogecoin.params.MainNetParams;
-import com.google.dogecoin.params.TestNet2Params;
-import com.google.dogecoin.params.TestNet3Params;
-import com.google.dogecoin.params.UnitTestParams;
-import com.google.dogecoin.script.Script;
-import com.google.dogecoin.script.ScriptOpCodes;
+import com.google.monacoin.params.MainNetParams;
+import com.google.monacoin.params.TestNet2Params;
+import com.google.monacoin.params.TestNet3Params;
+import com.google.monacoin.params.UnitTestParams;
+import com.google.monacoin.script.Script;
+import com.google.monacoin.script.ScriptOpCodes;
 import com.google.common.base.Objects;
 import org.spongycastle.util.encoders.Hex;
 
@@ -31,7 +31,7 @@ import java.math.BigInteger;
 import java.util.HashMap;
 import java.util.Map;
 
-import static com.google.dogecoin.core.Utils.COIN;
+import static com.google.monacoin.core.Utils.COIN;
 
 /**
  * <p>NetworkParameters contains the data needed for working with an instantiation of a Bitcoin chain.</p>
@@ -45,19 +45,19 @@ public abstract class NetworkParameters implements Serializable {
     /**
      * The protocol version this library implements.
      */
-    public static final int PROTOCOL_VERSION = 70001;
+    public static final int PROTOCOL_VERSION = 70002;
 
     /**
      * The alert signing key originally owned by Satoshi, and now passed on to Gavin along with a few others.
      */
-    public static final byte[] SATOSHI_KEY = Hex.decode("04fc9702847840aaf195de8442ebecedf5b095cdbb9bc716bda9110971b28a49e0ead8564ff0db22209e0374782c093bb899692d524e9d6a6956e7c5ecbcd68284");
+    public static final byte[] SATOSHI_KEY = Hex.decode("040184710fa689ad5023690c80f3a49c8f13f8d45b8c857fbcbc8bc4a8e4d3eb4b10f4d4604fa08dce601aaf0f470216fe1b51850b4acf21b179c45070ac7b03a9");
 
     /** The string returned by getId() for the main, production network where people trade things. */
-    public static final String ID_MAINNET = "org.dogecoin.production";
+    public static final String ID_MAINNET = "org.bitcoin.production";
     /** The string returned by getId() for the testnet. */
-    public static final String ID_TESTNET = "org.dogecoin.test";
+    public static final String ID_TESTNET = "org.bitcoin.test";
     /** Unit test network. */
-    public static final String ID_UNITTESTNET = "com.google.dogecoin.unittest";
+    public static final String ID_UNITTESTNET = "com.google.bitcoin.unittest";
 
     // TODO: Seed nodes should be here as well.
 
@@ -100,13 +100,13 @@ public abstract class NetworkParameters implements Serializable {
             //
             //   "The Times 03/Jan/2009 Chancellor on brink of second bailout for banks"
             byte[] bytes = Hex.decode
-                    ("04ffff001d0104084e696e746f6e646f");
+                    ("04ffff001d01044c564465632e20333174682032303133204a6170616e2c205468652077696e6e696e67206e756d62657273206f6620746865203230313320596561722d456e64204a756d626f204c6f74746572793a32332d313330393136");
             t.addInput(new TransactionInput(n, t, bytes));
             ByteArrayOutputStream scriptPubKeyBytes = new ByteArrayOutputStream();
             Script.writeBytes(scriptPubKeyBytes, Hex.decode
                     ("040184710fa689ad5023690c80f3a49c8f13f8d45b8c857fbcbc8bc4a8e4d3eb4b10f4d4604fa08dce601aaf0f470216fe1b51850b4acf21b179c45070ac7b03a9"));
             scriptPubKeyBytes.write(ScriptOpCodes.OP_CHECKSIG);
-            t.addOutput(new TransactionOutput(n, t, Utils.toNanoCoins(88, 0), scriptPubKeyBytes.toByteArray()));
+            t.addOutput(new TransactionOutput(n, t, Utils.toNanoCoins(50, 0), scriptPubKeyBytes.toByteArray()));
         } catch (Exception e) {
             // Cannot happen.
             throw new RuntimeException(e);
@@ -115,8 +115,9 @@ public abstract class NetworkParameters implements Serializable {
         return genesisBlock;
     }
 
-    public static final int TARGET_TIMESPAN = (int)(4 * 60 * 60);  // 4h per difficulty cycle, on average.
-    public static final int TARGET_SPACING = (int)(1 * 60);  // 1 minutes per block.
+
+    public static final int TARGET_TIMESPAN = (int)(1.1 * 24 * 60 * 60);  // 1.1d per difficulty cycle, on average.
+    public static final int TARGET_SPACING = (int)(1.5 * 60);  // 1.5 minutes per block.
     public static final int INTERVAL = TARGET_TIMESPAN / TARGET_SPACING;
     
     /**
@@ -129,7 +130,7 @@ public abstract class NetworkParameters implements Serializable {
     /**
      * The maximum money to be generated
      */
-    public static final BigInteger MAX_MONEY = new BigInteger("100000000000", 10).multiply(COIN);
+    public static final BigInteger MAX_MONEY = new BigInteger("168000000", 10).multiply(COIN);
 
     /** Alias for TestNet3Params.get(), use that instead. */
     @Deprecated
@@ -248,7 +249,7 @@ public abstract class NetworkParameters implements Serializable {
     }
 
     /**
-     * First byte of a base58 encoded address. See {@link com.google.dogecoin.core.Address}. This is the same as acceptableAddressCodes[0] and
+     * First byte of a base58 encoded address. See {@link com.google.monacoin.core.Address}. This is the same as acceptableAddressCodes[0] and
      * is the one used for "normal" addresses. Other types of address may be encountered with version codes found in
      * the acceptableAddressCodes array.
      */
@@ -256,7 +257,7 @@ public abstract class NetworkParameters implements Serializable {
         return addressHeader;
     }
 
-    /** First byte of a base58 encoded dumped private key. See {@link com.google.dogecoin.core.DumpedPrivateKey}. */
+    /** First byte of a base58 encoded dumped private key. See {@link com.google.monacoin.core.DumpedPrivateKey}. */
     public int getDumpedPrivateKeyHeader() {
         return dumpedPrivateKeyHeader;
     }
@@ -297,7 +298,7 @@ public abstract class NetworkParameters implements Serializable {
     }
 
     /**
-     * The key used to sign {@link com.google.dogecoin.core.AlertMessage}s. You can use {@link com.google.dogecoin.core.ECKey#verify(byte[], byte[], byte[])} to verify
+     * The key used to sign {@link com.google.monacoin.core.AlertMessage}s. You can use {@link com.google.monacoin.core.ECKey#verify(byte[], byte[], byte[])} to verify
      * signatures using it.
      */
     public byte[] getAlertSigningKey() {

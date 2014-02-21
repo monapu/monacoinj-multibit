@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.core;
+package com.google.monacoin.core;
 
-import com.google.dogecoin.params.MainNetParams;
-import com.google.dogecoin.params.UnitTestParams;
-import com.google.dogecoin.store.BlockStore;
-import com.google.dogecoin.store.MemoryBlockStore;
+import com.google.monacoin.params.MainNetParams;
+import com.google.monacoin.params.UnitTestParams;
+import com.google.monacoin.store.BlockStore;
+import com.google.monacoin.store.MemoryBlockStore;
 import org.junit.Before;
 import org.junit.Test;
 import org.spongycastle.util.encoders.Hex;
@@ -28,8 +28,8 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.util.Arrays;
 
-import static com.google.dogecoin.utils.TestUtils.createFakeBlock;
-import static com.google.dogecoin.utils.TestUtils.createFakeTx;
+import static com.google.monacoin.utils.TestUtils.createFakeBlock;
+import static com.google.monacoin.utils.TestUtils.createFakeTx;
 import static org.junit.Assert.*;
 
 public class LazyParseByteCacheTest {

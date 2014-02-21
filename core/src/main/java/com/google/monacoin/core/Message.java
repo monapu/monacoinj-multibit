@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.core;
+package com.google.monacoin.core;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -290,7 +290,7 @@ public abstract class Message implements Serializable {
     }
 
     /**
-     * Serialize this message to a byte array that conforms to the dogecoin wire protocol.
+     * Serialize this message to a byte array that conforms to the bitcoin wire protocol.
      * <br/>
      * This method may return the original byte array used to construct this message if the
      * following conditions are met:
@@ -353,7 +353,7 @@ public abstract class Message implements Serializable {
     }
 
     /**
-     * Serialize this message to the provided OutputStream using the dogecoin wire format.
+     * Serialize this message to the provided OutputStream using the bitcoin wire format.
      *
      * @param stream
      * @throws IOException

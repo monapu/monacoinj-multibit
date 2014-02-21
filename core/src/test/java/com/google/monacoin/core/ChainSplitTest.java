@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.core;
+package com.google.monacoin.core;
 
-import com.google.dogecoin.core.TransactionConfidence.ConfidenceType;
-import com.google.dogecoin.params.UnitTestParams;
-import com.google.dogecoin.store.MemoryBlockStore;
-import com.google.dogecoin.utils.BriefLogFormatter;
-import com.google.dogecoin.utils.TestUtils;
-import com.google.dogecoin.utils.Threading;
+import com.google.monacoin.core.TransactionConfidence.ConfidenceType;
+import com.google.monacoin.params.UnitTestParams;
+import com.google.monacoin.store.MemoryBlockStore;
+import com.google.monacoin.utils.BriefLogFormatter;
+import com.google.monacoin.utils.TestUtils;
+import com.google.monacoin.utils.Threading;
 import org.junit.Before;
 import org.junit.Test;
 import org.slf4j.Logger;

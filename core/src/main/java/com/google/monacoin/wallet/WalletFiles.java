@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.wallet;
+package com.google.monacoin.wallet;
 
-import com.google.dogecoin.core.Wallet;
-import com.google.dogecoin.utils.Threading;
+import com.google.monacoin.core.Wallet;
+import com.google.monacoin.utils.Threading;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

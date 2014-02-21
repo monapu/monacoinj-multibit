@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.protocols.niowrapper;
+package com.google.monacoin.protocols.niowrapper;
 
-import com.google.dogecoin.core.Utils;
+import com.google.monacoin.core.Utils;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.MessageLite;
 

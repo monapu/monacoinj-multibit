@@ -14,16 +14,16 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.examples.toywallet;
+package com.google.monacoin.examples.toywallet;
 
-import com.google.dogecoin.core.*;
-import com.google.dogecoin.discovery.DnsDiscovery;
-import com.google.dogecoin.params.MainNetParams;
-import com.google.dogecoin.params.TestNet3Params;
-import com.google.dogecoin.store.H2FullPrunedBlockStore;
-import com.google.dogecoin.store.SPVBlockStore;
-import com.google.dogecoin.store.UnreadableWalletException;
-import com.google.dogecoin.utils.BriefLogFormatter;
+import com.google.monacoin.core.*;
+import com.google.monacoin.discovery.DnsDiscovery;
+import com.google.monacoin.params.MainNetParams;
+import com.google.monacoin.params.TestNet3Params;
+import com.google.monacoin.store.H2FullPrunedBlockStore;
+import com.google.monacoin.store.SPVBlockStore;
+import com.google.monacoin.store.UnreadableWalletException;
+import com.google.monacoin.utils.BriefLogFormatter;
 import com.google.common.collect.Lists;
 import org.spongycastle.util.encoders.Hex;
 

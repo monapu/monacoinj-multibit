@@ -1,9 +1,9 @@
-package com.google.dogecoin.protocols.channels;
+package com.google.monacoin.protocols.channels;
 
-import com.google.dogecoin.core.Sha256Hash;
-import com.google.dogecoin.core.TransactionBroadcaster;
-import com.google.dogecoin.core.Utils;
-import com.google.dogecoin.core.Wallet;
+import com.google.monacoin.core.Sha256Hash;
+import com.google.monacoin.core.TransactionBroadcaster;
+import com.google.monacoin.core.Utils;
+import com.google.monacoin.core.Wallet;
 import org.bitcoin.paymentchannel.Protos;
 
 import java.math.BigInteger;

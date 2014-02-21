@@ -1,8 +1,8 @@
-package com.google.dogecoin.protocols.channels;
+package com.google.monacoin.protocols.channels;
 
-import com.google.dogecoin.core.*;
-import com.google.dogecoin.protocols.channels.PaymentChannelCloseException.CloseReason;
-import com.google.dogecoin.utils.Threading;
+import com.google.monacoin.core.*;
+import com.google.monacoin.protocols.channels.PaymentChannelCloseException.CloseReason;
+import com.google.monacoin.utils.Threading;
 import com.google.protobuf.ByteString;
 import net.jcip.annotations.GuardedBy;
 import org.bitcoin.paymentchannel.Protos;
@@ -127,7 +127,7 @@ public class PaymentChannelServer {
      *                               rejected by clients, and a value too low will require excessive channel reopening
      *                               and may cause fees to be require to close the channel. A reasonable value depends
      *                               entirely on the expected maximum for the channel, and should likely be somewhere
-     *                               between a few bitcents and a dogecoin.
+     *                               between a few bitcents and a bitcoin.
      * @param conn A callback listener which represents the connection to the client (forwards messages we generate to
      *             the client and will close the connection on request)
      */

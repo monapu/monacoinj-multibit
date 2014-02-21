@@ -14,15 +14,15 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.examples;
+package com.google.monacoin.examples;
 
-import com.google.dogecoin.core.*;
-import com.google.dogecoin.kits.WalletAppKit;
-import com.google.dogecoin.params.TestNet3Params;
-import com.google.dogecoin.protocols.channels.PaymentChannelClientConnection;
-import com.google.dogecoin.protocols.channels.StoredPaymentChannelClientStates;
-import com.google.dogecoin.protocols.channels.ValueOutOfRangeException;
-import com.google.dogecoin.utils.BriefLogFormatter;
+import com.google.monacoin.core.*;
+import com.google.monacoin.kits.WalletAppKit;
+import com.google.monacoin.params.TestNet3Params;
+import com.google.monacoin.protocols.channels.PaymentChannelClientConnection;
+import com.google.monacoin.protocols.channels.StoredPaymentChannelClientStates;
+import com.google.monacoin.protocols.channels.ValueOutOfRangeException;
+import com.google.monacoin.utils.BriefLogFormatter;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
@@ -34,7 +34,7 @@ import java.math.BigInteger;
 import java.net.InetSocketAddress;
 import java.util.concurrent.CountDownLatch;
 
-import static com.google.dogecoin.core.Utils.CENT;
+import static com.google.monacoin.core.Utils.CENT;
 import static java.math.BigInteger.TEN;
 import static java.math.BigInteger.ZERO;
 

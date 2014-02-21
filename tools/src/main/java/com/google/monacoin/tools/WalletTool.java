@@ -14,17 +14,17 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.tools;
+package com.google.monacoin.tools;
 
-import com.google.dogecoin.core.*;
-import com.google.dogecoin.crypto.KeyCrypterException;
-import com.google.dogecoin.discovery.DnsDiscovery;
-import com.google.dogecoin.discovery.PeerDiscovery;
-import com.google.dogecoin.params.MainNetParams;
-import com.google.dogecoin.params.RegTestParams;
-import com.google.dogecoin.params.TestNet3Params;
-import com.google.dogecoin.store.*;
-import com.google.dogecoin.utils.BriefLogFormatter;
+import com.google.monacoin.core.*;
+import com.google.monacoin.crypto.KeyCrypterException;
+import com.google.monacoin.discovery.DnsDiscovery;
+import com.google.monacoin.discovery.PeerDiscovery;
+import com.google.monacoin.params.MainNetParams;
+import com.google.monacoin.params.RegTestParams;
+import com.google.monacoin.params.TestNet3Params;
+import com.google.monacoin.store.*;
+import com.google.monacoin.utils.BriefLogFormatter;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 import joptsimple.OptionSpec;

@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.core;
+package com.google.monacoin.core;
 
-import com.google.dogecoin.IsMultiBitClass;
-import com.google.dogecoin.core.TransactionConfidence.ConfidenceType;
-import com.google.dogecoin.crypto.TransactionSignature;
-import com.google.dogecoin.script.Script;
-import com.google.dogecoin.script.ScriptBuilder;
-import com.google.dogecoin.script.ScriptOpCodes;
+import com.google.monacoin.IsMultiBitClass;
+import com.google.monacoin.core.TransactionConfidence.ConfidenceType;
+import com.google.monacoin.crypto.TransactionSignature;
+import com.google.monacoin.script.Script;
+import com.google.monacoin.script.ScriptBuilder;
+import com.google.monacoin.script.ScriptOpCodes;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import org.slf4j.Logger;
@@ -35,7 +35,7 @@ import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.*;
 
-import static com.google.dogecoin.core.Utils.*;
+import static com.google.monacoin.core.Utils.*;
 
 /**
  * <p>A transaction represents the movement of coins from some addresses to some other addresses. It can also represent
@@ -65,16 +65,16 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
      * If fee is lower than this value (in satoshis), a default reference client will treat it as if there were no fee.
      * Currently this is 10000 satoshis.
      */
-    public static final BigInteger REFERENCE_DEFAULT_MIN_TX_FEE = BigInteger.valueOf(100000000);
+    public static final BigInteger REFERENCE_DEFAULT_MIN_TX_FEE = BigInteger.valueOf(100000);
 
     /**
      * Any standard (ie pay-to-address) output smaller than this value (in satoshis) will most likely be rejected by the network.
      * This is calculated by assuming a standard output will be 34 bytes, and then using the formula used in
      * {@link TransactionOutput#getMinNonDustValue(BigInteger)}. Currently it's 5460 satoshis.
      */
-    public static final BigInteger MIN_NONDUST_OUTPUT = BigInteger.ONE;
+    public static final BigInteger MIN_NONDUST_OUTPUT = BigInteger.valueOf(100000);
 
-    // These are serialized in both dogecoin and java serialization.
+    // These are serialized in both bitcoin and java serialization.
     private long version;
     private ArrayList<TransactionInput> inputs;
     private ArrayList<TransactionOutput> outputs;
@@ -656,7 +656,7 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
                 }
                 s.append(" ");
                 s.append(bitcoinValueToPlainString(out.getValue()));
-                s.append(" DOGE");
+                s.append(" MONA");
                 if (!out.isAvailableForSpending()) {
                     s.append(" Spent");
                 }
@@ -853,7 +853,7 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
 
     /**
      * Calculates a signature that is valid for being inserted into the input at the given position. This is simply
-     * a wrapper around calling {@link Transaction#hashForSignature(int, byte[], com.google.dogecoin.core.Transaction.SigHash, boolean)}
+     * a wrapper around calling {@link Transaction#hashForSignature(int, byte[], com.google.monacoin.core.Transaction.SigHash, boolean)}
      * followed by {@link ECKey#sign(Sha256Hash, org.spongycastle.crypto.params.KeyParameter)} and then returning
      * a new {@link TransactionSignature}.
      *
@@ -874,7 +874,7 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
 
     /**
      * Calculates a signature that is valid for being inserted into the input at the given position. This is simply
-     * a wrapper around calling {@link Transaction#hashForSignature(int, byte[], com.google.dogecoin.core.Transaction.SigHash, boolean)}
+     * a wrapper around calling {@link Transaction#hashForSignature(int, byte[], com.google.monacoin.core.Transaction.SigHash, boolean)}
      * followed by {@link ECKey#sign(Sha256Hash)} and then returning a new {@link TransactionSignature}.
      *
      * @param inputIndex Which input to calculate the signature for, as an index.
@@ -934,7 +934,7 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
         // The SIGHASH flags are used in the design of contracts, please see this page for a further understanding of
         // the purposes of the code in this method:
         //
-        //   https://en.dogecoin.it/wiki/Contracts
+        //   https://en.bitcoin.it/wiki/Contracts
 
         try {
             // Store all the input scripts and clear them in preparation for signing. If we're signing a fresh
@@ -1249,7 +1249,7 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
     /**
      * <p>Returns true if this transaction is considered finalized and can be placed in a block. Non-finalized
      * transactions won't be included by miners and can be replaced with newer versions using sequence numbers.
-     * This is useful in certain types of <a href="http://en.dogecoin.it/wiki/Contracts">contracts</a>, such as
+     * This is useful in certain types of <a href="http://en.bitcoin.it/wiki/Contracts">contracts</a>, such as
      * micropayment channels.</p>
      *
      * <p>Note that currently the replacement feature is disabled in the Satoshi client and will need to be

@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.protocols.channels;
+package com.google.monacoin.protocols.channels;
 
-import com.google.dogecoin.core.*;
+import com.google.monacoin.core.*;
 
 import java.math.BigInteger;
 import java.util.Date;
@@ -78,7 +78,7 @@ public class StoredServerChannel {
     }
 
     /**
-     * If a handler is connected, call its {@link com.google.dogecoin.protocols.channels.PaymentChannelServer#close()}
+     * If a handler is connected, call its {@link com.google.monacoin.protocols.channels.PaymentChannelServer#close()}
      * method thus disconnecting the TCP connection.
      */
     synchronized void closeConnectedHandler() {

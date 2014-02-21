@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.protocols.niowrapper;
+package com.google.monacoin.protocols.niowrapper;
 
 import java.net.InetAddress;
 import javax.annotation.Nullable;

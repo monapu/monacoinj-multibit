@@ -1,8 +1,8 @@
-package com.google.dogecoin.protocols.channels;
+package com.google.monacoin.protocols.channels;
 
-import com.google.dogecoin.core.*;
-import com.google.dogecoin.protocols.channels.PaymentChannelCloseException.CloseReason;
-import com.google.dogecoin.utils.Threading;
+import com.google.monacoin.core.*;
+import com.google.monacoin.protocols.channels.PaymentChannelCloseException.CloseReason;
+import com.google.monacoin.utils.Threading;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.protobuf.ByteString;
 import net.jcip.annotations.GuardedBy;

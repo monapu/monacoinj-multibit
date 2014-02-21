@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.core;
+package com.google.monacoin.core;
 
 
-import com.google.dogecoin.params.MainNetParams;
+import com.google.monacoin.params.MainNetParams;
 import org.junit.Test;
 import org.spongycastle.util.encoders.Hex;
 
@@ -54,7 +54,7 @@ public class BitcoinSerializerTest {
     @Test
     public void testAddr() throws Exception {
     	BitcoinSerializer bs = new BitcoinSerializer(MainNetParams.get());
-        // the actual data from https://en.dogecoin.it/wiki/Protocol_specification#addr
+        // the actual data from https://en.bitcoin.it/wiki/Protocol_specification#addr
         ByteArrayInputStream bais = new ByteArrayInputStream(addrMessage);
         AddressMessage a = (AddressMessage)bs.deserialize(bais);
         assertEquals(1, a.getAddresses().size());

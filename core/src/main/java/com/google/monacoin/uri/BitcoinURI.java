@@ -16,12 +16,12 @@
  * 
  */
 
-package com.google.dogecoin.uri;
+package com.google.monacoin.uri;
 
-import com.google.dogecoin.core.Address;
-import com.google.dogecoin.core.AddressFormatException;
-import com.google.dogecoin.core.NetworkParameters;
-import com.google.dogecoin.core.Utils;
+import com.google.monacoin.core.Address;
+import com.google.monacoin.core.AddressFormatException;
+import com.google.monacoin.core.NetworkParameters;
+import com.google.monacoin.core.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -49,8 +49,8 @@ import static com.google.common.base.Preconditions.checkNotNull;
  * <p>The following input forms are accepted:</p>
  *
  * <ul>
- * <li>{@code dogecoin:<address>}</li>
- * <li>{@code dogecoin:<address>?<name1>=<value1>&<name2>=<value2>} with multiple
+ * <li>{@code monacoin:<address>}</li>
+ * <li>{@code monacoin:<address>?<name1>=<value1>&<name2>=<value2>} with multiple
  * additional name/value pairs</li>
  * </ul>
  *
@@ -73,7 +73,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
  * @author Andreas Schildbach (initial code)
  * @author Jim Burton (enhancements for MultiBit)
  * @author Gary Rowe (BIP21 support)
- * @see <a href="https://en.dogecoin.it/wiki/BIP_0021">BIP 0021</a>
+ * @see <a href="https://en.bitcoin.it/wiki/BIP_0021">BIP 0021</a>
  */
 public class BitcoinURI {
     /**
@@ -87,7 +87,7 @@ public class BitcoinURI {
     public static final String FIELD_AMOUNT = "amount";
     public static final String FIELD_ADDRESS = "address";
 
-    public static final String BITCOIN_SCHEME = "dogecoin";
+    public static final String BITCOIN_SCHEME = "monacoin";
     private static final String ENCODED_SPACE_CHARACTER = "%20";
     private static final String AMPERSAND_SEPARATOR = "&";
     private static final String QUESTION_MARK_SEPARATOR = "?";
@@ -128,20 +128,20 @@ public class BitcoinURI {
             throw new BitcoinURIParseException("Bad URI syntax", e);
         }
 
-        // URI is formed as  dogecoin:<address>?<query parameters>
-        // blockchain.info generates URIs of non-BIP compliant form dogecoin://address?....
+        // URI is formed as  monacoin:<address>?<query parameters>
+        // blockchain.info generates URIs of non-BIP compliant form monacoin://address?....
         // We support both until Ben fixes his code.
         
-        // Remove the dogecoin scheme.
+        // Remove the monacoin scheme.
         // (Note: getSchemeSpecificPart() is not used as it unescapes the label and parse then fails.
-        // For instance with : dogecoin:129mVqKUmJ9uwPxKJBnNdABbuaaNfho4Ha?amount=0.06&label=Tom%20%26%20Jerry
+        // For instance with : monacoin:129mVqKUmJ9uwPxKJBnNdABbuaaNfho4Ha?amount=0.06&label=Tom%20%26%20Jerry
         // the & (%26) in Tom and Jerry gets interpreted as a separator and the label then gets parsed
         // as 'Tom ' instead of 'Tom & Jerry')
         String schemeSpecificPart;
-        if (input.startsWith("dogecoin://")) {
-            schemeSpecificPart = input.substring("dogecoin://".length());
-        } else if (input.startsWith("dogecoin:")) {
-            schemeSpecificPart = input.substring("dogecoin:".length());
+        if (input.startsWith("monacoin://")) {
+            schemeSpecificPart = input.substring("monacoin://".length());
+        } else if (input.startsWith("monacoin:")) {
+            schemeSpecificPart = input.substring("monacoin:".length());
         } else {
             throw new BitcoinURIParseException("Unsupported URI scheme: " + uri.getScheme());
         }

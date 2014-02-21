@@ -14,16 +14,16 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.core;
+package com.google.monacoin.core;
 
-import com.google.dogecoin.core.Wallet.BalanceType;
-import com.google.dogecoin.params.MainNetParams;
-import com.google.dogecoin.params.TestNet2Params;
-import com.google.dogecoin.params.UnitTestParams;
-import com.google.dogecoin.store.BlockStore;
-import com.google.dogecoin.store.MemoryBlockStore;
-import com.google.dogecoin.utils.BriefLogFormatter;
-import com.google.dogecoin.utils.TestUtils;
+import com.google.monacoin.core.Wallet.BalanceType;
+import com.google.monacoin.params.MainNetParams;
+import com.google.monacoin.params.TestNet2Params;
+import com.google.monacoin.params.UnitTestParams;
+import com.google.monacoin.store.BlockStore;
+import com.google.monacoin.store.MemoryBlockStore;
+import com.google.monacoin.utils.BriefLogFormatter;
+import com.google.monacoin.utils.TestUtils;
 import com.google.common.util.concurrent.ListenableFuture;
 import org.junit.After;
 import org.junit.Before;
@@ -33,8 +33,8 @@ import java.math.BigInteger;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 
-import static com.google.dogecoin.utils.TestUtils.createFakeBlock;
-import static com.google.dogecoin.utils.TestUtils.createFakeTx;
+import static com.google.monacoin.utils.TestUtils.createFakeBlock;
+import static com.google.monacoin.utils.TestUtils.createFakeTx;
 import static org.junit.Assert.*;
 
 // Handling of chain splits/reorgs are in ChainSplitTests.

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.core;
+package com.google.monacoin.core;
 
 /**
  * Thrown to indicate that you don't have enough money available to perform the requested operation.

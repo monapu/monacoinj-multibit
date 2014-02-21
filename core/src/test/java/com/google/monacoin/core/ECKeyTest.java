@@ -14,16 +14,16 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.core;
+package com.google.monacoin.core;
 
-import com.google.dogecoin.crypto.EncryptedPrivateKey;
-import com.google.dogecoin.crypto.KeyCrypter;
-import com.google.dogecoin.crypto.KeyCrypterScrypt;
-import com.google.dogecoin.crypto.TransactionSignature;
-import com.google.dogecoin.params.MainNetParams;
-import com.google.dogecoin.params.TestNet3Params;
-import com.google.dogecoin.params.UnitTestParams;
-import com.google.dogecoin.utils.BriefLogFormatter;
+import com.google.monacoin.crypto.EncryptedPrivateKey;
+import com.google.monacoin.crypto.KeyCrypter;
+import com.google.monacoin.crypto.KeyCrypterScrypt;
+import com.google.monacoin.crypto.TransactionSignature;
+import com.google.monacoin.params.MainNetParams;
+import com.google.monacoin.params.TestNet3Params;
+import com.google.monacoin.params.UnitTestParams;
+import com.google.monacoin.utils.BriefLogFormatter;
 import com.google.protobuf.ByteString;
 import org.bitcoinj.wallet.Protos;
 import org.bitcoinj.wallet.Protos.ScryptParameters;
@@ -41,7 +41,7 @@ import java.util.Arrays;
 import java.util.Random;
 import java.io.InputStream;
 
-import static com.google.dogecoin.core.Utils.reverseBytes;
+import static com.google.monacoin.core.Utils.reverseBytes;
 import static org.junit.Assert.*;
 
 public class ECKeyTest {

@@ -1,4 +1,4 @@
-package com.google.dogecoin.crypto;
+package com.google.monacoin.crypto;
 
 import org.junit.Assert;
 import org.junit.Test;

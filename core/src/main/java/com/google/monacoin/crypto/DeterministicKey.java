@@ -13,11 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.google.dogecoin.crypto;
+package com.google.monacoin.crypto;
 
-import com.google.dogecoin.core.Base58;
-import com.google.dogecoin.core.ECKey;
-import com.google.dogecoin.core.Utils;
+import com.google.monacoin.core.Base58;
+import com.google.monacoin.core.ECKey;
+import com.google.monacoin.core.Utils;
 import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
@@ -39,7 +39,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 /**
  * A deterministic key is a node in a {@link DeterministicHierarchy}. As per
- * <a href="https://en.dogecoin.it/wiki/BIP_0032">the BIP 32 specification</a> it is a pair (key, chaincode). If you
+ * <a href="https://en.bitcoin.it/wiki/BIP_0032">the BIP 32 specification</a> it is a pair (key, chaincode). If you
  * know its path in the tree you can derive more keys from this.
  */
 public class DeterministicKey implements Serializable {

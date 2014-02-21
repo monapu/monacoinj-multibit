@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.core;
+package com.google.monacoin.core;
 
-import com.google.dogecoin.script.Script;
-import com.google.dogecoin.script.ScriptBuilder;
+import com.google.monacoin.script.Script;
+import com.google.monacoin.script.ScriptBuilder;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
@@ -34,15 +34,15 @@ import java.util.Date;
 import java.util.LinkedList;
 import java.util.List;
 
-import static com.google.dogecoin.core.Utils.doubleDigest;
-import static com.google.dogecoin.core.Utils.doubleDigestTwoBuffers;
-import static com.google.dogecoin.core.Utils.scryptDigest;
+import static com.google.monacoin.core.Utils.doubleDigest;
+import static com.google.monacoin.core.Utils.doubleDigestTwoBuffers;
+import static com.google.monacoin.core.Utils.scryptDigest;
 
 /**
  * <p>A block is a group of transactions, and is one of the fundamental data structures of the Bitcoin system.
  * It records a set of {@link Transaction}s together with some data that links it into a place in the global block
  * chain, and proves that a difficult calculation was done over its contents. See
- * <a href="http://www.dogecoin.org/dogecoin.pdf">the Bitcoin technical paper</a> for
+ * <a href="http://www.bitcoin.org/bitcoin.pdf">the Bitcoin technical paper</a> for
  * more detail on blocks. <p/>
  *
  * To get a block, you can either build one from the raw bytes you can get from another implementation, or request one
@@ -164,7 +164,7 @@ public class Block extends Message {
      * the system it was 50 coins per block, in late 2012 it went to 25 coins per block, and so on. The size of
      * a coinbase transaction is inflation plus fees.</p>
      *
-     * <p>The half-life is controlled by {@link com.google.dogecoin.core.NetworkParameters#getSubsidyDecreaseBlockCount()}.
+     * <p>The half-life is controlled by {@link com.google.monacoin.core.NetworkParameters#getSubsidyDecreaseBlockCount()}.
      * </p>
      */
     public BigInteger getBlockInflation(int height) {
@@ -930,7 +930,7 @@ public class Block extends Message {
      * Returns the difficulty of the proof of work that this block should meet encoded <b>in compact form</b>. The {@link
      * BlockChain} verifies that this is not too easy by looking at the length of the chain when the block is added.
      * To find the actual value the hash should be compared against, use
-     * {@link com.google.dogecoin.core.Block#getDifficultyTargetAsInteger()}. Note that this is <b>not</b> the same as
+     * {@link com.google.monacoin.core.Block#getDifficultyTargetAsInteger()}. Note that this is <b>not</b> the same as
      * the difficulty value reported by the Bitcoin "getdifficulty" RPC that you may see on various block explorers.
      * That number is the result of applying a formula to the underlying difficulty to normalize the minimum to 1.
      * Calculating the difficulty that way is currently unsupported.

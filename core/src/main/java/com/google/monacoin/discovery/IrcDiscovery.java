@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.discovery;
+package com.google.monacoin.discovery;
 
-import com.google.dogecoin.core.AddressFormatException;
-import com.google.dogecoin.core.Base58;
-import com.google.dogecoin.core.Utils;
+import com.google.monacoin.core.AddressFormatException;
+import com.google.monacoin.core.Base58;
+import com.google.monacoin.core.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -49,7 +49,7 @@ public class IrcDiscovery implements PeerDiscovery {
      * Finds a list of peers by connecting to an IRC network, joining a channel, decoding the nicks and then
      * disconnecting.
      *
-     * @param channel The IRC channel to join, either "#dogecoin" or "#bitcoinTEST3" for the production and test networks
+     * @param channel The IRC channel to join, either "#bitcoin" or "#bitcoinTEST3" for the production and test networks
      *                respectively.
      */
     public IrcDiscovery(String channel) {
@@ -61,7 +61,7 @@ public class IrcDiscovery implements PeerDiscovery {
      * disconnecting.
      *
      * @param server  Name or textual IP address of the IRC server to join.
-     * @param channel The IRC channel to join, either "#dogecoin" or "#bitcoinTEST3" for the production and test networks
+     * @param channel The IRC channel to join, either "#bitcoin" or "#bitcoinTEST3" for the production and test networks
      */
     public IrcDiscovery(String channel, String server, int port) {
         this.channel = channel;

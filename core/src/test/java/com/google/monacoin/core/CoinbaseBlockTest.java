@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.core;
+package com.google.monacoin.core;
 
-import com.google.dogecoin.core.AbstractBlockChain.NewBlockType;
-import com.google.dogecoin.core.Wallet.BalanceType;
-import com.google.dogecoin.params.MainNetParams;
+import com.google.monacoin.core.AbstractBlockChain.NewBlockType;
+import com.google.monacoin.core.Wallet.BalanceType;
+import com.google.monacoin.params.MainNetParams;
 import org.junit.Test;
 
 import java.io.ByteArrayOutputStream;

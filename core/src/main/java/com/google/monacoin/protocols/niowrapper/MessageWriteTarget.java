@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.protocols.niowrapper;
+package com.google.monacoin.protocols.niowrapper;
 
 /**
  * A target to which messages can be written/connection can be closed

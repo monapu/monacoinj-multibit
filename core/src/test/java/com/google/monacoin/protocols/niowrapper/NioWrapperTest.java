@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.protocols.niowrapper;
+package com.google.monacoin.protocols.niowrapper;
 
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import com.google.dogecoin.core.Utils;
+import com.google.monacoin.core.Utils;
 import com.google.common.util.concurrent.SettableFuture;
 import com.google.protobuf.ByteString;
 import org.bitcoin.paymentchannel.Protos;

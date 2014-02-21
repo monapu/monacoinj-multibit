@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.core;
+package com.google.monacoin.core;
 
-import com.google.dogecoin.core.WalletTransaction.Pool;
-import com.google.dogecoin.store.BlockStore;
-import com.google.dogecoin.store.BlockStoreException;
-import com.google.dogecoin.utils.ListenerRegistration;
-import com.google.dogecoin.utils.Threading;
+import com.google.monacoin.core.WalletTransaction.Pool;
+import com.google.monacoin.store.BlockStore;
+import com.google.monacoin.store.BlockStoreException;
+import com.google.monacoin.utils.ListenerRegistration;
+import com.google.monacoin.utils.Threading;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
@@ -119,7 +119,7 @@ public class Peer {
         Sha256Hash hash;
         SettableFuture future;
         // If the peer does not support the notfound message, we'll use ping/pong messages to simulate it. This is
-        // a nasty hack that relies on the fact that dogecoin-qt is single threaded and processes messages in order.
+        // a nasty hack that relies on the fact that monacoin-qt is single threaded and processes messages in order.
         // The nonce field records which pong should clear this request as "not found".
         long nonce;
     }
@@ -138,7 +138,7 @@ public class Peer {
 
     // A minimum needed block height to allow the implementation to connect to a peer.
     // This is needed as many nodes run an old version and supply users with a wrong
-    // fork. As dogecoin didn't change the version message to distinguish client versions,
+    // fork. As bitcoin didn't change the version message to distinguish client versions,
     // we must resort to this "hack". We set it to 50k although the fork happened around 42k.
     // This way we are sure not to kill nodes which are currently catching up themselves.
     private final long MIN_PEER_BLOCK_HEIGHT = 50000;
@@ -1174,7 +1174,7 @@ public class Peer {
         List<Sha256Hash> blockLocator = new ArrayList<Sha256Hash>(51);
         // For now we don't do the exponential thinning as suggested here:
         //
-        //   https://en.dogecoin.it/wiki/Protocol_specification#getblocks
+        //   https://en.bitcoin.it/wiki/Protocol_specification#getblocks
         //
         // This is because it requires scanning all the block chain headers, which is very slow. Instead we add the top
         // 50 block headers. If there is a re-org deeper than that, we'll end up downloading the entire chain. We
@@ -1293,7 +1293,7 @@ public class Peer {
     /**
      * Sends the peer a ping message and returns a future that will be invoked when the pong is received back.
      * The future provides a number which is the number of milliseconds elapsed between the ping and the pong.
-     * Once the pong is received the value returned by {@link com.google.dogecoin.core.Peer#getLastPingTime()} is
+     * Once the pong is received the value returned by {@link com.google.monacoin.core.Peer#getLastPingTime()} is
      * updated.
      * @throws ProtocolException if the peer version is too low to support measurable pings.
      */
@@ -1312,7 +1312,7 @@ public class Peer {
     }
 
     /**
-     * Returns the elapsed time of the last ping/pong cycle. If {@link com.google.dogecoin.core.Peer#ping()} has never
+     * Returns the elapsed time of the last ping/pong cycle. If {@link com.google.monacoin.core.Peer#ping()} has never
      * been called or we did not hear back the "pong" message yet, returns {@link Long#MAX_VALUE}.
      */
     public long getLastPingTime() {
@@ -1327,7 +1327,7 @@ public class Peer {
     }
 
     /**
-     * Returns a moving average of the last N ping/pong cycles. If {@link com.google.dogecoin.core.Peer#ping()} has never
+     * Returns a moving average of the last N ping/pong cycles. If {@link com.google.monacoin.core.Peer#ping()} has never
      * been called or we did not hear back the "pong" message yet, returns {@link Long#MAX_VALUE}. The moving average
      * window is 5 buckets.
      */

@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.protocols.channels;
+package com.google.monacoin.protocols.channels;
 
-import com.google.dogecoin.core.*;
-import com.google.dogecoin.crypto.TransactionSignature;
-import com.google.dogecoin.script.Script;
-import com.google.dogecoin.script.ScriptBuilder;
+import com.google.monacoin.core.*;
+import com.google.monacoin.crypto.TransactionSignature;
+import com.google.monacoin.script.Script;
+import com.google.monacoin.script.ScriptBuilder;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.util.concurrent.FutureCallback;

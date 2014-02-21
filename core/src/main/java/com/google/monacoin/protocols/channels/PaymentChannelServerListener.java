@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.protocols.channels;
+package com.google.monacoin.protocols.channels;
 
 import java.io.IOException;
 import java.math.BigInteger;
@@ -24,12 +24,12 @@ import java.net.SocketAddress;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
-import com.google.dogecoin.core.Sha256Hash;
-import com.google.dogecoin.core.TransactionBroadcaster;
-import com.google.dogecoin.core.Wallet;
-import com.google.dogecoin.protocols.niowrapper.ProtobufParser;
-import com.google.dogecoin.protocols.niowrapper.ProtobufParserFactory;
-import com.google.dogecoin.protocols.niowrapper.ProtobufServer;
+import com.google.monacoin.core.Sha256Hash;
+import com.google.monacoin.core.TransactionBroadcaster;
+import com.google.monacoin.core.Wallet;
+import com.google.monacoin.protocols.niowrapper.ProtobufParser;
+import com.google.monacoin.protocols.niowrapper.ProtobufParserFactory;
+import com.google.monacoin.protocols.niowrapper.ProtobufServer;
 import org.bitcoin.paymentchannel.Protos;
 
 import static com.google.common.base.Preconditions.checkNotNull;

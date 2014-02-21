@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.core;
+package com.google.monacoin.core;
 
-import com.google.dogecoin.store.BlockStore;
-import com.google.dogecoin.store.BlockStoreException;
+import com.google.monacoin.store.BlockStore;
+import com.google.monacoin.store.BlockStoreException;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -37,8 +37,8 @@ public class BlockChain extends AbstractBlockChain {
      * one from scratch, or you can deserialize a saved wallet from disk using {@link Wallet#loadFromFile(java.io.File)}
      * </p>
      *
-     * <p>For the store, you should use {@link com.google.dogecoin.store.SPVBlockStore} or you could also try a
-     * {@link com.google.dogecoin.store.MemoryBlockStore} if you want to hold all headers in RAM and don't care about
+     * <p>For the store, you should use {@link com.google.monacoin.store.SPVBlockStore} or you could also try a
+     * {@link com.google.monacoin.store.MemoryBlockStore} if you want to hold all headers in RAM and don't care about
      * disk serialization (this is rare).</p>
      */
     public BlockChain(NetworkParameters params, Wallet wallet, BlockStore blockStore) throws BlockStoreException {

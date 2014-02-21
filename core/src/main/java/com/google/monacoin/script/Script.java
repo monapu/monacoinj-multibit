@@ -15,10 +15,10 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.script;
+package com.google.monacoin.script;
 
-import com.google.dogecoin.core.*;
-import com.google.dogecoin.crypto.TransactionSignature;
+import com.google.monacoin.core.*;
+import com.google.monacoin.crypto.TransactionSignature;
 import com.google.common.collect.Lists;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,8 +33,8 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.*;
 
-import static com.google.dogecoin.script.ScriptOpCodes.*;
-import static com.google.dogecoin.core.Utils.bytesToHexString;
+import static com.google.monacoin.script.ScriptOpCodes.*;
+import static com.google.monacoin.core.Utils.bytesToHexString;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkState;
 
@@ -43,7 +43,7 @@ import static com.google.common.base.Preconditions.checkState;
 /**
  * <p>Programs embedded inside transactions that control redemption of payments.</p>
  *
- * <p>Bitcoin transactions don't specify what they do directly. Instead <a href="https://en.dogecoin.it/wiki/Script">a
+ * <p>Bitcoin transactions don't specify what they do directly. Instead <a href="https://en.bitcoin.it/wiki/Script">a
  * small binary stack language</a> is used to define programs that when evaluated return whether the transaction
  * "accepts" or rejects the other transactions connected to it.</p>
  *
@@ -203,7 +203,7 @@ public class Script {
     public byte[] getPubKeyHash() throws ScriptException {
         if (!isSentToAddress())
             throw new ScriptException("Script not in the standard scriptPubKey form");
-        // Otherwise, the third element is the hash of the public key, ie the dogecoin address.
+        // Otherwise, the third element is the hash of the public key, ie the bitcoin address.
         return chunks.get(2).data;
     }
 
@@ -412,7 +412,7 @@ public class Script {
      * spending input to provide a program matching that hash. This rule is "soft enforced" by the network as it does
      * not exist in Satoshis original implementation. It means blocks containing P2SH transactions that don't match
      * correctly are considered valid, but won't be mined upon, so they'll be rapidly re-orgd out of the chain. This
-     * logic is defined by <a href="https://en.dogecoin.it/wiki/BIP_0016">BIP 16</a>.</p>
+     * logic is defined by <a href="https://en.bitcoin.it/wiki/BIP_0016">BIP 16</a>.</p>
      *
      * <p>bitcoinj does not support creation of P2SH transactions today. The goal of P2SH is to allow short addresses
      * even for complex scripts (eg, multi-sig outputs) so they are convenient to work with in things like QRcodes or

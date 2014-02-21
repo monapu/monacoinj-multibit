@@ -1,8 +1,8 @@
-package com.google.dogecoin.core;
+package com.google.monacoin.core;
 
-import com.google.dogecoin.core.TransactionConfidence.ConfidenceType;
-import com.google.dogecoin.params.UnitTestParams;
-import com.google.dogecoin.store.MemoryBlockStore;
+import com.google.monacoin.core.TransactionConfidence.ConfidenceType;
+import com.google.monacoin.params.UnitTestParams;
+import com.google.monacoin.store.MemoryBlockStore;
 import org.junit.Test;
 import org.spongycastle.util.encoders.Hex;
 

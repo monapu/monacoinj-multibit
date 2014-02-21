@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.core;
+package com.google.monacoin.core;
 
-import com.google.dogecoin.store.BlockStore;
-import com.google.dogecoin.store.BlockStoreException;
-import com.google.dogecoin.utils.ListenerRegistration;
-import com.google.dogecoin.utils.Threading;
+import com.google.monacoin.store.BlockStore;
+import com.google.monacoin.store.BlockStoreException;
+import com.google.monacoin.utils.ListenerRegistration;
+import com.google.monacoin.utils.Threading;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
@@ -46,7 +46,7 @@ import static java.lang.String.format;
  * <p>An AbstractBlockChain implementation must be connected to a {@link BlockStore} implementation. The chain object
  * by itself doesn't store any data, that's delegated to the store. Which store you use is a decision best made by
  * reading the getting started guide, but briefly, fully validating block chains need fully validating stores. In
- * the lightweight SPV mode, a {@link com.google.dogecoin.store.SPVBlockStore} is the right choice.</p>
+ * the lightweight SPV mode, a {@link com.google.monacoin.store.SPVBlockStore} is the right choice.</p>
  *
  * <p>This class implements an abstract class which makes it simple to create a BlockChain that does/doesn't do full
  * verification.  It verifies headers and is implements most of what is required to implement SPV mode, but
@@ -55,7 +55,7 @@ import static java.lang.String.format;
  * <p>There are two subclasses of AbstractBlockChain that are useful: {@link BlockChain}, which is the simplest
  * class and implements <i>simplified payment verification</i>. This is a lightweight and efficient mode that does
  * not verify the contents of blocks, just their headers. A {@link FullPrunedBlockChain} paired with a
- * {@link com.google.dogecoin.store.H2FullPrunedBlockStore} implements full verification, which is equivalent to the
+ * {@link com.google.monacoin.store.H2FullPrunedBlockStore} implements full verification, which is equivalent to the
  * original Satoshi client. To learn more about the alternative security models, please consult the articles on the
  * website.</p>
  *
@@ -833,28 +833,11 @@ public abstract class AbstractBlockChain {
         // Limit the adjustment step.
         final int targetTimespan = params.getTargetTimespan();
         // Limit the adjustment step.
-        if (storedPrev.getHeight()+1 > 10000)
-        {
-            if (timespan < targetTimespan / 4)
-                timespan = targetTimespan / 4;
-            if (timespan > targetTimespan * 4)
-                timespan = targetTimespan * 4;
-        }
-        else if (storedPrev.getHeight()+1 > 5000)
-        {
-            if (timespan < targetTimespan / 8)
-                timespan = targetTimespan / 8;
-            if (timespan > targetTimespan * 4)
-                timespan = targetTimespan * 4;
-        }
-        else
-        {
-            if (timespan < targetTimespan / 16)
-                timespan = targetTimespan / 16;
-            if (timespan > targetTimespan * 4)
-                timespan = targetTimespan * 4;
-        }
-
+        if (timespan < targetTimespan / 4)
+            timespan = targetTimespan / 4;
+        if (timespan > targetTimespan * 4)
+            timespan = targetTimespan * 4;
+        
         BigInteger newDifficulty = Utils.decodeCompactBits(prev.getDifficultyTarget());
         newDifficulty = newDifficulty.multiply(BigInteger.valueOf(timespan));
         newDifficulty = newDifficulty.divide(BigInteger.valueOf(targetTimespan));
@@ -882,7 +865,7 @@ public abstract class AbstractBlockChain {
         // and then leaving, making it too hard to mine a block. On non-difficulty transition points, easy
         // blocks are allowed if there has been a span of 20 minutes without one.
         final long timeDelta = next.getTimeSeconds() - prev.getTimeSeconds();
-        // There is an integer underflow bug in dogecoin-qt that means mindiff blocks are accepted when time
+        // There is an integer underflow bug in monacoin-qt that means mindiff blocks are accepted when time
         // goes backwards.
         if (timeDelta >= 0 && timeDelta <= NetworkParameters.TARGET_SPACING * 2) {
             // Walk backwards until we find a block that doesn't have the easiest proof of work, then check

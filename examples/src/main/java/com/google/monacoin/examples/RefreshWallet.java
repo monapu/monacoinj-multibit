@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.examples;
+package com.google.monacoin.examples;
 
-import com.google.dogecoin.core.*;
-import com.google.dogecoin.params.TestNet3Params;
-import com.google.dogecoin.store.BlockStore;
-import com.google.dogecoin.store.MemoryBlockStore;
+import com.google.monacoin.core.*;
+import com.google.monacoin.params.TestNet3Params;
+import com.google.monacoin.store.BlockStore;
+import com.google.monacoin.store.MemoryBlockStore;
 
 import java.io.File;
 import java.math.BigInteger;

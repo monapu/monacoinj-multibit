@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.core;
+package com.google.monacoin.core;
 
-import com.google.dogecoin.params.TestNet2Params;
-import com.google.dogecoin.params.UnitTestParams;
-import com.google.dogecoin.script.ScriptOpCodes;
+import com.google.monacoin.params.TestNet2Params;
+import com.google.monacoin.params.UnitTestParams;
+import com.google.monacoin.script.ScriptOpCodes;
 import org.junit.Test;
 import org.spongycastle.util.encoders.Hex;
 
@@ -147,7 +147,7 @@ public class BlockTest {
         Transaction tx2 = (Transaction) ois.readObject();
         ois.close();
 
-        // Note that this will actually check the transactions are equal by doing dogecoin serialization and checking
+        // Note that this will actually check the transactions are equal by doing bitcoin serialization and checking
         // the bytestreams are the same! A true "deep equals" is not implemented for Transaction. The primary purpose
         // of this test is to ensure no errors occur during the Java serialization/deserialization process.
         assertEquals(tx, tx2);

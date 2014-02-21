@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
 
   <groupId>com.google</groupId>
-  <artifactId>dogecoinj-parent</artifactId>
+  <artifactId>monacoinj-parent</artifactId>
   <version>0.10.3-MB-ALICE</version>
   <packaging>pom</packaging>
 
@@ -13,9 +13,9 @@
     <module>tools</module>
   </modules>
 
-  <name>dogecoinj Parent</name>
-  <description>Provides the common configuration for the Dogecoinj modules</description>
-  <url>https://github.com/langerhans/dogecoinj-new</url>
+  <name>monacoinj Parent</name>
+  <description>Provides the common configuration for the Monacoinj modules</description>
+  <url>http://hayabusa.2ch.net/news4vip/</url>
 
   <licenses>
     <license>
@@ -26,28 +26,36 @@
     </license>
   </licenses>
 
+  <!--
   <issueManagement>
     <system>GitHub</system>
     <url>https://github.com/langerhans/dogecoinj-new/issues</url>
   </issueManagement>
-
-<!--  <mailingLists>
+  -->
+  
+  <!--  
+     <mailingLists>
     <mailingList>
       <name>dogecoinj Google Group</name>
       <post>https://groups.google.com/forum/#!forum/dogecoinj</post>
     </mailingList>
-  </mailingLists>-->
+  </mailingLists>
+  -->
 
+  <!--
   <distributionManagement>
     <repository>
         <id>dogecoinj-distribution</id>
         <url>https://github.com/langerhans/dogecoinj-new</url>
     </repository>
   </distributionManagement>
+  -->
 
+  <!--
   <scm>
     <url>https://github.com/langerhans/dogecoinj-new</url>
   </scm>
+  -->
 
   <!-- Common build plugin configuration -->
   <build>

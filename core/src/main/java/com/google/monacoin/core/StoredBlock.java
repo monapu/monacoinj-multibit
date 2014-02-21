@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.core;
+package com.google.monacoin.core;
 
-import com.google.dogecoin.store.BlockStore;
-import com.google.dogecoin.store.BlockStoreException;
+import com.google.monacoin.store.BlockStore;
+import com.google.monacoin.store.BlockStoreException;
 
 import java.io.*;
 import java.math.BigInteger;

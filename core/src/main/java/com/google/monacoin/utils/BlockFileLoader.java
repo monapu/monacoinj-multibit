@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.utils;
+package com.google.monacoin.utils;
 
-import com.google.dogecoin.core.Block;
-import com.google.dogecoin.core.NetworkParameters;
-import com.google.dogecoin.core.ProtocolException;
-import com.google.dogecoin.core.Utils;
+import com.google.monacoin.core.Block;
+import com.google.monacoin.core.NetworkParameters;
+import com.google.monacoin.core.ProtocolException;
+import com.google.monacoin.core.Utils;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -52,9 +52,9 @@ public class BlockFileLoader implements Iterable<Block>, Iterator<Block> {
     public static List<File> getReferenceClientBlockFileList() {
         String defaultDataDir;
         if (System.getProperty("os.name").toLowerCase().indexOf("win") >= 0) {
-            defaultDataDir = System.getenv("APPDATA") + "\\.dogecoin\\blocks\\";
+            defaultDataDir = System.getenv("APPDATA") + "\\.monacoin\\blocks\\";
         } else {
-            defaultDataDir = System.getProperty("user.home") + "/.dogecoin/blocks/";
+            defaultDataDir = System.getProperty("user.home") + "/.monacoin/blocks/";
         }
         
         List<File> list = new LinkedList<File>();

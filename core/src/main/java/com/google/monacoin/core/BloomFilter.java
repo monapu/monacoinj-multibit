@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.core;
+package com.google.monacoin.core;
 
 import com.google.common.base.Objects;
 
@@ -261,7 +261,7 @@ public class BloomFilter extends Message {
     }
 
     /**
-     * Returns true if this filter will match anything. See {@link com.google.dogecoin.core.BloomFilter#setMatchAll()}
+     * Returns true if this filter will match anything. See {@link com.google.monacoin.core.BloomFilter#setMatchAll()}
      * for when this can be a useful thing to do.
      */
     public boolean matchesAll() {

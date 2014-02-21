@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.kits;
+package com.google.monacoin.kits;
 
-import com.google.dogecoin.core.*;
-import com.google.dogecoin.discovery.DnsDiscovery;
-import com.google.dogecoin.store.BlockStoreException;
-import com.google.dogecoin.store.SPVBlockStore;
-import com.google.dogecoin.store.WalletProtobufSerializer;
+import com.google.monacoin.core.*;
+import com.google.monacoin.discovery.DnsDiscovery;
+import com.google.monacoin.store.BlockStoreException;
+import com.google.monacoin.store.SPVBlockStore;
+import com.google.monacoin.store.WalletProtobufSerializer;
 import com.google.common.util.concurrent.AbstractIdleService;
 
 import java.io.File;

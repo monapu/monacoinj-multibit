@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.core;
+package com.google.monacoin.core;
 
 import java.util.List;
 
@@ -69,7 +69,7 @@ public interface PeerEventListener {
      * callback is passed as "m" to the next, forming a chain.</p>
      *
      * <p>Note that this will never be called if registered with any executor other than
-     * {@link com.google.dogecoin.utils.Threading#SAME_THREAD}</p>
+     * {@link com.google.monacoin.utils.Threading#SAME_THREAD}</p>
      */
     public Message onPreMessageReceived(Peer peer, Message m);
 

@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.crypto;
+package com.google.monacoin.crypto;
 
-import com.google.dogecoin.core.AddressFormatException;
-import com.google.dogecoin.core.Base58;
+import com.google.monacoin.core.AddressFormatException;
+import com.google.monacoin.core.Base58;
 import com.google.common.base.Functions;
 import com.google.common.base.Joiner;
 import com.google.common.collect.Iterables;
@@ -31,7 +31,7 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * A test with test vectors as per BIP 32 spec: https://en.dogecoin.it/wiki/BIP_0032#Test_Vectors
+ * A test with test vectors as per BIP 32 spec: https://en.bitcoin.it/wiki/BIP_0032#Test_Vectors
  */
 public class BIP32Test {
     private static final Logger log = LoggerFactory.getLogger(BIP32Test.class);

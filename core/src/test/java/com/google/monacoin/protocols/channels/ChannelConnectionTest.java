@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.protocols.channels;
+package com.google.monacoin.protocols.channels;
 
-import com.google.dogecoin.core.*;
-import com.google.dogecoin.utils.TestWithWallet;
-import com.google.dogecoin.utils.Threading;
+import com.google.monacoin.core.*;
+import com.google.monacoin.utils.TestWithWallet;
+import com.google.monacoin.utils.Threading;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import org.junit.After;

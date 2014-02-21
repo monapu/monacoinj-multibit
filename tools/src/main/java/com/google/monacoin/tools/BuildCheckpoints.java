@@ -1,11 +1,11 @@
-package com.google.dogecoin.tools;
+package com.google.monacoin.tools;
 
-import com.google.dogecoin.core.*;
-import com.google.dogecoin.params.MainNetParams;
-import com.google.dogecoin.store.BlockStore;
-import com.google.dogecoin.store.MemoryBlockStore;
-import com.google.dogecoin.utils.BriefLogFormatter;
-import com.google.dogecoin.utils.Threading;
+import com.google.monacoin.core.*;
+import com.google.monacoin.params.MainNetParams;
+import com.google.monacoin.store.BlockStore;
+import com.google.monacoin.store.MemoryBlockStore;
+import com.google.monacoin.utils.BriefLogFormatter;
+import com.google.monacoin.utils.Threading;
 
 import java.io.DataOutputStream;
 import java.io.FileInputStream;
@@ -87,8 +87,8 @@ public class BuildCheckpoints {
         // Sanity check the created file.
         CheckpointManager manager = new CheckpointManager(params, new FileInputStream("checkpoints"));
         checkState(manager.numCheckpoints() == checkpoints.size());
-        StoredBlock test = manager.getCheckpointBefore(1386664400);  // Just after block 4571
-        checkState(test.getHeight() == 4560);
-        checkState(test.getHeader().getHashAsString().equals("0158aab19442930f6070314c90679e067f9065d335585b45fc68d62074d4ae66"));
+        StoredBlock test = manager.getCheckpointBefore( 1388934000 );
+        checkState(test.getHeight() == 10560);
+        checkState(test.getHeader().getHashAsString().equals("86153c02cf2c98db355959da59645c36a99499bfa177ebf6f3edb6c9704ccc61"));
     }
 }

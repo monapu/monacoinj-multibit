@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.protocols.channels;
+package com.google.monacoin.protocols.channels;
 
 import java.math.BigInteger;
 
-import com.google.dogecoin.core.Sha256Hash;
-import com.google.dogecoin.protocols.niowrapper.ProtobufParser;
+import com.google.monacoin.core.Sha256Hash;
+import com.google.monacoin.protocols.niowrapper.ProtobufParser;
 import org.bitcoin.paymentchannel.Protos;
 
 /**
@@ -38,8 +38,8 @@ public abstract class ServerConnectionEventHandler {
      * <p>Note that this does <i>NOT</i> actually broadcast the most recent payment transaction, which will be triggered
      * automatically when the channel times out by the {@link StoredPaymentChannelServerStates}, or manually by calling
      * {@link StoredPaymentChannelServerStates#closeChannel(StoredServerChannel)} with the channel returned by
-     * {@link StoredPaymentChannelServerStates#getChannel(com.google.dogecoin.core.Sha256Hash)} with the id provided in
-     * {@link ServerConnectionEventHandler#channelOpen(com.google.dogecoin.core.Sha256Hash)}</p>
+     * {@link StoredPaymentChannelServerStates#getChannel(com.google.monacoin.core.Sha256Hash)} with the id provided in
+     * {@link ServerConnectionEventHandler#channelOpen(com.google.monacoin.core.Sha256Hash)}</p>
      */
     protected final synchronized void closeChannel() {
         if (connectionChannel == null)

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.crypto;
+package com.google.monacoin.crypto;
 
 import org.junit.Test;
 import org.spongycastle.util.encoders.Hex;

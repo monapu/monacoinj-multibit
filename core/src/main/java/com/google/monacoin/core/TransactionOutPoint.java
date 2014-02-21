@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.core;
+package com.google.monacoin.core;
 
-import com.google.dogecoin.script.Script;
+import com.google.monacoin.script.Script;
 
 import java.io.IOException;
 import java.io.ObjectOutputStream;

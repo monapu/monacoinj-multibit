@@ -13,9 +13,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.google.dogecoin.discovery;
+package com.google.monacoin.discovery;
 
-import com.google.dogecoin.params.MainNetParams;
+import com.google.monacoin.params.MainNetParams;
 import org.junit.Test;
 
 import java.net.InetSocketAddress;

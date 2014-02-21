@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.core;
+package com.google.monacoin.core;
 
 
 import org.slf4j.Logger;
@@ -27,11 +27,11 @@ import java.io.UnsupportedEncodingException;
 import java.util.HashMap;
 import java.util.Map;
 
-import static com.google.dogecoin.core.Utils.*;
+import static com.google.monacoin.core.Utils.*;
 
 /**
  * <p>Methods to serialize and de-serialize messages to the Bitcoin network format as defined in
- * <a href="https://en.dogecoin.it/wiki/Protocol_specification">the protocol specification</a>.</p>
+ * <a href="https://en.bitcoin.it/wiki/Protocol_specification">the protocol specification</a>.</p>
  *
  * <p>To be able to serialize and deserialize new Message subclasses the following criteria needs to be met.</p>
  *

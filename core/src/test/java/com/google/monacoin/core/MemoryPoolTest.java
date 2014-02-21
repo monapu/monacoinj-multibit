@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.core;
+package com.google.monacoin.core;
 
-import com.google.dogecoin.params.UnitTestParams;
-import com.google.dogecoin.utils.BriefLogFormatter;
-import com.google.dogecoin.utils.TestUtils;
+import com.google.monacoin.params.UnitTestParams;
+import com.google.monacoin.utils.BriefLogFormatter;
+import com.google.monacoin.utils.TestUtils;
 import org.junit.Before;
 import org.junit.Test;
 

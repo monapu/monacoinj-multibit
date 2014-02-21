@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.protocols.niowrapper;
+package com.google.monacoin.protocols.niowrapper;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -27,7 +27,7 @@ import java.nio.channels.spi.SelectorProvider;
 import java.util.Iterator;
 import java.util.concurrent.locks.ReentrantLock;
 
-import com.google.dogecoin.utils.Threading;
+import com.google.monacoin.utils.Threading;
 import com.google.common.annotations.VisibleForTesting;
 import org.slf4j.LoggerFactory;
 

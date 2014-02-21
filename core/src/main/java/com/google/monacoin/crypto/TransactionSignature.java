@@ -14,18 +14,18 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.crypto;
+package com.google.monacoin.crypto;
 
-import com.google.dogecoin.core.ECKey;
-import com.google.dogecoin.core.Transaction;
-import com.google.dogecoin.core.VerificationException;
+import com.google.monacoin.core.ECKey;
+import com.google.monacoin.core.Transaction;
+import com.google.monacoin.core.VerificationException;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.math.BigInteger;
 
 /**
- * A TransactionSignature wraps an {@link com.google.dogecoin.core.ECKey.ECDSASignature} and adds methods for handling
+ * A TransactionSignature wraps an {@link com.google.monacoin.core.ECKey.ECDSASignature} and adds methods for handling
  * the additional SIGHASH mode byte that is used.
  */
 public class TransactionSignature extends ECKey.ECDSASignature {

@@ -21,14 +21,14 @@
     <modelVersion>4.0.0</modelVersion>
     <parent>
         <groupId>com.google</groupId>
-        <artifactId>dogecoinj-parent</artifactId>
+        <artifactId>monacoinj-parent</artifactId>
         <version>0.10.3-MB-ALICE</version>
     </parent>
 
-    <artifactId>dogecoinj</artifactId>
+    <artifactId>monacoinj</artifactId>
 
-    <name>dogecoinj</name>
-    <description>A Java Dogecoin library</description>
+    <name>monacoinj</name>
+    <description>A Java Monacoin library</description>
 
     <profiles>
         <profile>

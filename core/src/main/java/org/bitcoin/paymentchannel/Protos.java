@@ -537,7 +537,7 @@ public final class Protos {
         return org.bitcoin.paymentchannel.Protos.internal_static_paymentchannels_TwoWayChannelMessage_fieldAccessorTable;
       }
       
-      // Construct using org.dogecoin.paymentchannel.Protos.TwoWayChannelMessage.newBuilder()
+      // Construct using org.bitcoin.paymentchannel.Protos.TwoWayChannelMessage.newBuilder()
       private Builder() {
         maybeForceBuilderInitialization();
       }
@@ -1914,7 +1914,7 @@ public final class Protos {
         return org.bitcoin.paymentchannel.Protos.internal_static_paymentchannels_ClientVersion_fieldAccessorTable;
       }
       
-      // Construct using org.dogecoin.paymentchannel.Protos.ClientVersion.newBuilder()
+      // Construct using org.bitcoin.paymentchannel.Protos.ClientVersion.newBuilder()
       private Builder() {
         maybeForceBuilderInitialization();
       }
@@ -2355,7 +2355,7 @@ public final class Protos {
         return org.bitcoin.paymentchannel.Protos.internal_static_paymentchannels_ServerVersion_fieldAccessorTable;
       }
       
-      // Construct using org.dogecoin.paymentchannel.Protos.ServerVersion.newBuilder()
+      // Construct using org.bitcoin.paymentchannel.Protos.ServerVersion.newBuilder()
       private Builder() {
         maybeForceBuilderInitialization();
       }
@@ -2788,7 +2788,7 @@ public final class Protos {
         return org.bitcoin.paymentchannel.Protos.internal_static_paymentchannels_Initiate_fieldAccessorTable;
       }
       
-      // Construct using org.dogecoin.paymentchannel.Protos.Initiate.newBuilder()
+      // Construct using org.bitcoin.paymentchannel.Protos.Initiate.newBuilder()
       private Builder() {
         maybeForceBuilderInitialization();
       }
@@ -3241,7 +3241,7 @@ public final class Protos {
         return org.bitcoin.paymentchannel.Protos.internal_static_paymentchannels_ProvideRefund_fieldAccessorTable;
       }
       
-      // Construct using org.dogecoin.paymentchannel.Protos.ProvideRefund.newBuilder()
+      // Construct using org.bitcoin.paymentchannel.Protos.ProvideRefund.newBuilder()
       private Builder() {
         maybeForceBuilderInitialization();
       }
@@ -3632,7 +3632,7 @@ public final class Protos {
         return org.bitcoin.paymentchannel.Protos.internal_static_paymentchannels_ReturnRefund_fieldAccessorTable;
       }
       
-      // Construct using org.dogecoin.paymentchannel.Protos.ReturnRefund.newBuilder()
+      // Construct using org.bitcoin.paymentchannel.Protos.ReturnRefund.newBuilder()
       private Builder() {
         maybeForceBuilderInitialization();
       }
@@ -3981,7 +3981,7 @@ public final class Protos {
         return org.bitcoin.paymentchannel.Protos.internal_static_paymentchannels_ProvideContract_fieldAccessorTable;
       }
       
-      // Construct using org.dogecoin.paymentchannel.Protos.ProvideContract.newBuilder()
+      // Construct using org.bitcoin.paymentchannel.Protos.ProvideContract.newBuilder()
       private Builder() {
         maybeForceBuilderInitialization();
       }
@@ -4356,7 +4356,7 @@ public final class Protos {
         return org.bitcoin.paymentchannel.Protos.internal_static_paymentchannels_UpdatePayment_fieldAccessorTable;
       }
       
-      // Construct using org.dogecoin.paymentchannel.Protos.UpdatePayment.newBuilder()
+      // Construct using org.bitcoin.paymentchannel.Protos.UpdatePayment.newBuilder()
       private Builder() {
         maybeForceBuilderInitialization();
       }
@@ -4868,7 +4868,7 @@ public final class Protos {
         return org.bitcoin.paymentchannel.Protos.internal_static_paymentchannels_Error_fieldAccessorTable;
       }
       
-      // Construct using org.dogecoin.paymentchannel.Protos.Error.newBuilder()
+      // Construct using org.bitcoin.paymentchannel.Protos.Error.newBuilder()
       private Builder() {
         maybeForceBuilderInitialization();
       }
@@ -5172,7 +5172,7 @@ public final class Protos {
       "AX_ERROR\020\002\022\031\n\025NO_ACCEPTABLE_VERSION\020\003\022\023\n" +
       "\017BAD_TRANSACTION\020\004\022\031\n\025TIME_WINDOW_TOO_LA" +
       "RGE\020\005\022\033\n\027CHANNEL_VALUE_TOO_LARGE\020\006\022\t\n\005OT" +
-      "HER\020\007B$\n\032org.dogecoin.paymentchannelB\006Pro" +
+      "HER\020\007B$\n\032org.bitcoin.paymentchannelB\006Pro" +
       "tos"
     };
     com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner assigner =

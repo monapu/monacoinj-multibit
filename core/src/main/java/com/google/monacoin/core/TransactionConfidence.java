@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.core;
+package com.google.monacoin.core;
 
-import com.google.dogecoin.IsMultiBitClass;
-import com.google.dogecoin.utils.Threading;
+import com.google.monacoin.IsMultiBitClass;
+import com.google.monacoin.utils.Threading;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
@@ -53,9 +53,9 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * <p>Alternatively, you may know that the transaction is "dead", that is, one or more of its inputs have
  * been double spent and will never confirm unless there is another re-org.</p>
  *
- * <p>TransactionConfidence is updated via the {@link com.google.dogecoin.core.TransactionConfidence#notifyWorkDone(Block)}
+ * <p>TransactionConfidence is updated via the {@link com.google.monacoin.core.TransactionConfidence#notifyWorkDone(Block)}
  * method to ensure the block depth and work done are up to date.</p>
- * To make a copy that won't be changed, use {@link com.google.dogecoin.core.TransactionConfidence#duplicate()}.
+ * To make a copy that won't be changed, use {@link com.google.monacoin.core.TransactionConfidence#duplicate()}.
  */
 public class TransactionConfidence implements Serializable, IsMultiBitClass {
     private static final long serialVersionUID = 4577920141400556444L;
@@ -91,7 +91,7 @@ public class TransactionConfidence implements Serializable, IsMultiBitClass {
          * announced and is considered valid by the network. A pending transaction will be announced if the containing
          * wallet has been attached to a live {@link PeerGroup} using {@link PeerGroup#addWallet(Wallet)}.
          * You can estimate how likely the transaction is to be included by connecting to a bunch of nodes then measuring
-         * how many announce it, using {@link com.google.dogecoin.core.TransactionConfidence#numBroadcastPeers()}.
+         * how many announce it, using {@link com.google.monacoin.core.TransactionConfidence#numBroadcastPeers()}.
          * Or if you saw it from a trusted peer, you can assume it's valid and will get mined sooner or later as well.
          */
         PENDING(2),
@@ -171,7 +171,7 @@ public class TransactionConfidence implements Serializable, IsMultiBitClass {
         /** An enum that describes why a transaction confidence listener is being invoked (i.e. the class of change). */
         public enum ChangeReason {
             /**
-             * Occurs when the type returned by {@link com.google.dogecoin.core.TransactionConfidence#getConfidenceType()}
+             * Occurs when the type returned by {@link com.google.monacoin.core.TransactionConfidence#getConfidenceType()}
              * has changed. For example, if a PENDING transaction changes to BUILDING or DEAD, then this reason will
              * be given. It's a high level summary.
              */

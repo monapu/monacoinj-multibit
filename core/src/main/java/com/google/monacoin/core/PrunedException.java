@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.core;
+package com.google.monacoin.core;
 
 // TODO: Rename PrunedException to something like RequiredDataWasPrunedException
 

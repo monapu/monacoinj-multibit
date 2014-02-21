@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.core;
+package com.google.monacoin.core;
 
 @SuppressWarnings("serial")
 public class AddressFormatException extends Exception {

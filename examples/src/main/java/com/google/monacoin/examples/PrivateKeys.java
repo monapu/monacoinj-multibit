@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.examples;
+package com.google.monacoin.examples;
 
-import com.google.dogecoin.core.*;
-import com.google.dogecoin.params.MainNetParams;
-import com.google.dogecoin.store.MemoryBlockStore;
+import com.google.monacoin.core.*;
+import com.google.monacoin.params.MainNetParams;
+import com.google.monacoin.store.MemoryBlockStore;
 
 import java.math.BigInteger;
 import java.net.InetAddress;
@@ -26,7 +26,7 @@ import java.net.InetAddress;
 /**
  * This example shows how to solve the challenge Hal posted here:<p>
  *
- * <a href="http://www.dogecoin.org/smf/index.php?topic=3638.0">http://www.dogecoin.org/smf/index.php?topic=3638
+ * <a href="http://www.bitcoin.org/smf/index.php?topic=3638.0">http://www.bitcoin.org/smf/index.php?topic=3638
  * .0</a><p>
  *
  * in which a private key with some coins associated with it is published. The goal is to import the private key,

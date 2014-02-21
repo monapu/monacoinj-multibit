@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.discovery;
+package com.google.monacoin.discovery;
 
 public class PeerDiscoveryException extends Exception {
     private static final long serialVersionUID = -2863411151549391392L;

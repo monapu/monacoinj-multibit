@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.core;
+package com.google.monacoin.core;
 
-import com.google.dogecoin.script.Script;
+import com.google.monacoin.script.Script;
 import com.google.common.base.Preconditions;
 
 import java.io.IOException;
@@ -25,7 +25,7 @@ import java.io.OutputStream;
 import java.io.Serializable;
 import java.util.Map;
 
-import com.google.dogecoin.IsMultiBitClass;
+import com.google.monacoin.IsMultiBitClass;
 
 import static com.google.common.base.Preconditions.checkElementIndex;
 import static com.google.common.base.Preconditions.checkNotNull;

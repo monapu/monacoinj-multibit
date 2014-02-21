@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.examples;
+package com.google.monacoin.examples;
 
-import com.google.dogecoin.core.Wallet;
+import com.google.monacoin.core.Wallet;
 
 import java.io.File;
 

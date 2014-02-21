@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.params;
+package com.google.monacoin.params;
 
-import com.google.dogecoin.core.Block;
+import com.google.monacoin.core.Block;
 
 import java.math.BigInteger;
 

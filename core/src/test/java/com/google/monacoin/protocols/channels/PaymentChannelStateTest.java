@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.protocols.channels;
+package com.google.monacoin.protocols.channels;
 
-import com.google.dogecoin.core.*;
-import com.google.dogecoin.script.Script;
-import com.google.dogecoin.script.ScriptBuilder;
-import com.google.dogecoin.utils.TestWithWallet;
+import com.google.monacoin.core.*;
+import com.google.monacoin.script.Script;
+import com.google.monacoin.script.ScriptBuilder;
+import com.google.monacoin.utils.TestWithWallet;
 import com.google.common.collect.Lists;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
@@ -34,8 +34,8 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.LinkedBlockingQueue;
 
-import static com.google.dogecoin.utils.TestUtils.createFakeTx;
-import static com.google.dogecoin.utils.TestUtils.makeSolvedTestBlock;
+import static com.google.monacoin.utils.TestUtils.createFakeTx;
+import static com.google.monacoin.utils.TestUtils.makeSolvedTestBlock;
 import static org.junit.Assert.*;
 
 public class PaymentChannelStateTest extends TestWithWallet {

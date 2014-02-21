@@ -20,15 +20,15 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <parent>
         <groupId>com.google</groupId>
-        <artifactId>dogecoinj-parent</artifactId>
+        <artifactId>monacoinj-parent</artifactId>
         <version>0.10.3-MB-ALICE</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
-    <artifactId>dogecoinj-examples</artifactId>
+    <artifactId>monacoinj-examples</artifactId>
 
-    <name>dogecoinj Examples</name>
-    <description>A collection of examples using the dogecoinj library</description>
+    <name>monacoinj Examples</name>
+    <description>A collection of examples using the monacoinj library</description>
 
     <!-- This section shows you how to lock down the dependency chain so if upstream developers get hacked, your app
          cannot be backdoored. Here we enforce the hash of the bitcoinj library. That in turn verifies the hashes of all
@@ -82,7 +82,7 @@
     <dependencies>
         <dependency>
             <groupId>com.google</groupId>
-            <artifactId>dogecoinj</artifactId>
+            <artifactId>monacoinj</artifactId>
             <version>${project.parent.version}</version>
         </dependency>
         <dependency>

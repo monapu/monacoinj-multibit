@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.core;
+package com.google.monacoin.core;
 
 /**
  * The "mempool" message asks a remote peer to announce all transactions in its memory pool, possibly restricted by

@@ -1,4 +1,4 @@
-package com.google.dogecoin.uri;
+package com.google.monacoin.uri;
 
 /**
  * <p>Exception to provide the following to {@link BitcoinURI}:</p>

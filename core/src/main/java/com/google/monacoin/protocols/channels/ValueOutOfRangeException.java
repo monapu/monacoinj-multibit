@@ -1,4 +1,4 @@
-package com.google.dogecoin.protocols.channels;
+package com.google.monacoin.protocols.channels;
 
 /**
  * Used when a given value is either too large too afford or too small for the network to accept.

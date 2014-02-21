@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.core;
+package com.google.monacoin.core;
 
-import com.google.dogecoin.utils.Threading;
+import com.google.monacoin.utils.Threading;
 import com.google.common.util.concurrent.SettableFuture;
 
 import java.util.concurrent.LinkedBlockingQueue;

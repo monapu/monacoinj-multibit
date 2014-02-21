@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.script;
+package com.google.monacoin.script;
 
-import com.google.dogecoin.core.*;
-import com.google.dogecoin.params.TestNet3Params;
+import com.google.monacoin.core.*;
+import com.google.monacoin.params.TestNet3Params;
 import com.google.common.collect.Lists;
 import org.junit.Test;
 import org.spongycastle.util.encoders.Hex;
@@ -31,7 +31,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 
-import static com.google.dogecoin.script.ScriptOpCodes.OP_INVALIDOPCODE;
+import static com.google.monacoin.script.ScriptOpCodes.OP_INVALIDOPCODE;
 import static org.junit.Assert.*;
 
 public class ScriptTest {

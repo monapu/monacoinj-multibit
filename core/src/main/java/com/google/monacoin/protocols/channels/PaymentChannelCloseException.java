@@ -1,4 +1,4 @@
-package com.google.dogecoin.protocols.channels;
+package com.google.monacoin.protocols.channels;
 
 /**
  * Used to indicate that a channel was closed before it was expected to be closed.
@@ -16,7 +16,7 @@ public class PaymentChannelCloseException extends Exception {
         // Values after here indicate its probably possible to try reopening channel again
 
         /**
-         * <p>The {@link com.google.dogecoin.protocols.channels.PaymentChannelClient#close()} method was called or the
+         * <p>The {@link com.google.monacoin.protocols.channels.PaymentChannelClient#close()} method was called or the
          * client sent a CLOSE message.</p>
          * <p>As long as the server received the CLOSE message, this means that the channel was closed and the payment
          * transaction (if any) was broadcast. If the client attempts to open a new connection, a new channel will have
@@ -25,7 +25,7 @@ public class PaymentChannelCloseException extends Exception {
         CLIENT_REQUESTED_CLOSE,
 
         /**
-         * <p>The {@link com.google.dogecoin.protocols.channels.PaymentChannelServer#close()} method was called or server
+         * <p>The {@link com.google.monacoin.protocols.channels.PaymentChannelServer#close()} method was called or server
          * sent a CLOSE message.</p>
          *
          * <p>This may occur if the server opts to close the connection for some reason, or automatically if the channel

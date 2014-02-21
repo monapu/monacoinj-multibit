@@ -14,15 +14,15 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.examples;
+package com.google.monacoin.examples;
 
-import com.google.dogecoin.core.NetworkParameters;
-import com.google.dogecoin.core.TCPNetworkConnection;
-import com.google.dogecoin.core.VersionMessage;
-import com.google.dogecoin.discovery.DnsDiscovery;
-import com.google.dogecoin.discovery.PeerDiscoveryException;
-import com.google.dogecoin.params.MainNetParams;
-import com.google.dogecoin.utils.BriefLogFormatter;
+import com.google.monacoin.core.NetworkParameters;
+import com.google.monacoin.core.TCPNetworkConnection;
+import com.google.monacoin.core.VersionMessage;
+import com.google.monacoin.discovery.DnsDiscovery;
+import com.google.monacoin.discovery.PeerDiscoveryException;
+import com.google.monacoin.params.MainNetParams;
+import com.google.monacoin.utils.BriefLogFormatter;
 import com.google.common.collect.Lists;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;

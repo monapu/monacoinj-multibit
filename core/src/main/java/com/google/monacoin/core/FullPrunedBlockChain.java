@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.core;
+package com.google.monacoin.core;
 
-import com.google.dogecoin.script.Script;
-import com.google.dogecoin.store.BlockStoreException;
-import com.google.dogecoin.store.FullPrunedBlockStore;
+import com.google.monacoin.script.Script;
+import com.google.monacoin.store.BlockStoreException;
+import com.google.monacoin.store.FullPrunedBlockStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -145,7 +145,7 @@ public class FullPrunedBlockChain extends AbstractBlockChain {
             if (!params.isCheckpoint(height)) {
                 // BIP30 violator blocks are ones that contain a duplicated transaction. They are all in the
                 // checkpoints list and we therefore only check non-checkpoints for duplicated transactions here. See the
-                // BIP30 document for more details on this: https://en.dogecoin.it/wiki/BIP_0030
+                // BIP30 document for more details on this: https://en.bitcoin.it/wiki/BIP_0030
                 for (Transaction tx : block.transactions) {
                     Sha256Hash hash = tx.getHash();
                     // If we already have unspent outputs for this hash, we saw the tx already. Either the block is

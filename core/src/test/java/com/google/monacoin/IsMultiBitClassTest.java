@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.google.dogecoin;
+package com.google.monacoin;
 
 import junit.framework.TestCase;
 
@@ -27,7 +27,7 @@ import org.junit.Test;
  * 
  */
 public class IsMultiBitClassTest extends TestCase {
-    private static final String GOOGLE_PREFIX = "com.google.dogecoin.";
+    private static final String GOOGLE_PREFIX = "com.google.monacoin.";
 
     @Test
     public void testIsMultiBitClass() throws ClassNotFoundException {
@@ -47,7 +47,7 @@ public class IsMultiBitClassTest extends TestCase {
         } else {
             boolean success = false;
             for (int i = 0; i < interfaces.length; i++) {
-                if (interfaces[i].getName().equals("com.google.dogecoin.IsMultiBitClass")) {
+                if (interfaces[i].getName().equals("com.google.monacoin.IsMultiBitClass")) {
                     success = true;
                     break;
                 }

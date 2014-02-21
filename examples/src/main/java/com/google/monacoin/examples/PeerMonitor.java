@@ -14,15 +14,15 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.examples;
+package com.google.monacoin.examples;
 
-import com.google.dogecoin.core.AbstractPeerEventListener;
-import com.google.dogecoin.core.NetworkParameters;
-import com.google.dogecoin.core.Peer;
-import com.google.dogecoin.core.PeerGroup;
-import com.google.dogecoin.discovery.DnsDiscovery;
-import com.google.dogecoin.params.MainNetParams;
-import com.google.dogecoin.utils.BriefLogFormatter;
+import com.google.monacoin.core.AbstractPeerEventListener;
+import com.google.monacoin.core.NetworkParameters;
+import com.google.monacoin.core.Peer;
+import com.google.monacoin.core.PeerGroup;
+import com.google.monacoin.discovery.DnsDiscovery;
+import com.google.monacoin.params.MainNetParams;
+import com.google.monacoin.utils.BriefLogFormatter;
 import com.google.common.collect.Lists;
 
 import javax.swing.*;

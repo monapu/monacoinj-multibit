@@ -14,19 +14,19 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.core;
+package com.google.monacoin.core;
 
-import com.google.dogecoin.core.Transaction.SigHash;
-import com.google.dogecoin.core.Wallet.SendRequest;
-import com.google.dogecoin.core.WalletTransaction.Pool;
-import com.google.dogecoin.crypto.KeyCrypter;
-import com.google.dogecoin.crypto.KeyCrypterException;
-import com.google.dogecoin.crypto.KeyCrypterScrypt;
-import com.google.dogecoin.store.WalletProtobufSerializer;
-import com.google.dogecoin.utils.TestUtils;
-import com.google.dogecoin.utils.TestWithWallet;
-import com.google.dogecoin.utils.Threading;
-import com.google.dogecoin.wallet.KeyTimeCoinSelector;
+import com.google.monacoin.core.Transaction.SigHash;
+import com.google.monacoin.core.Wallet.SendRequest;
+import com.google.monacoin.core.WalletTransaction.Pool;
+import com.google.monacoin.crypto.KeyCrypter;
+import com.google.monacoin.crypto.KeyCrypterException;
+import com.google.monacoin.crypto.KeyCrypterScrypt;
+import com.google.monacoin.store.WalletProtobufSerializer;
+import com.google.monacoin.utils.TestUtils;
+import com.google.monacoin.utils.TestWithWallet;
+import com.google.monacoin.utils.Threading;
+import com.google.monacoin.wallet.KeyTimeCoinSelector;
 import com.google.common.collect.Lists;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.protobuf.ByteString;
@@ -47,8 +47,8 @@ import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static com.google.dogecoin.core.Utils.*;
-import static com.google.dogecoin.utils.TestUtils.*;
+import static com.google.monacoin.core.Utils.*;
+import static com.google.monacoin.utils.TestUtils.*;
 import static org.junit.Assert.*;
 
 public class WalletTest extends TestWithWallet {

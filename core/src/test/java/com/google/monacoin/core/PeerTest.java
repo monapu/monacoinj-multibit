@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
-package com.google.dogecoin.core;
+package com.google.monacoin.core;
 
-import com.google.dogecoin.core.Peer.PeerHandler;
-import com.google.dogecoin.utils.TestUtils;
-import com.google.dogecoin.utils.Threading;
+import com.google.monacoin.core.Peer.PeerHandler;
+import com.google.monacoin.utils.TestUtils;
+import com.google.monacoin.utils.Threading;
 import com.google.common.util.concurrent.ListenableFuture;
 import org.easymock.Capture;
 import org.easymock.CaptureType;
@@ -33,7 +33,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Future;
 
-import static com.google.dogecoin.utils.TestUtils.*;
+import static com.google.monacoin.utils.TestUtils.*;
 import static org.easymock.EasyMock.*;
 import static org.junit.Assert.*;
 
