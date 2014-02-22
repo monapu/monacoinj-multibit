@@ -112,7 +112,9 @@ public class Peer {
     // simultaneously if we were to receive a newly solved block whilst parts of the chain are streaming to us.
     private final HashSet<Sha256Hash> pendingBlockDownloads = new HashSet<Sha256Hash>();
     // The lowest version number we're willing to accept. Lower than this will result in an immediate disconnect.
-    private volatile int vMinProtocolVersion = Pong.MIN_PROTOCOL_VERSION;
+    private volatile int vMinProtocolVersion = FilteredBlock.MIN_PROTOCOL_VERSION;
+    // A string to be checked inside the subversion to distinguis true 70001 nodes from 1.4.2 nodes.
+    private String ACCEPTED_SUBVERSION = "Shibetoshi";
     // When an API user explicitly requests a block or transaction from a peer, the InventoryItem is put here
     // whilst waiting for the response. Is not used for downloads Peer generates itself.
     private static class GetDataRequest {
@@ -343,6 +345,12 @@ public class Peer {
             {
                 log.warn("Connected to a peer with just {} blocks. Don't accept it.",
                         vPeerVersionMessage.bestHeight);
+                e.getChannel().close();
+            }
+            if (!vPeerVersionMessage.subVer.contains(ACCEPTED_SUBVERSION))
+            {
+                log.warn("Connected to a peer with subVer {}. Don't accept it.",
+                        vPeerVersionMessage.subVer);
                 e.getChannel().close();
             }
         } else if (m instanceof Ping) {
