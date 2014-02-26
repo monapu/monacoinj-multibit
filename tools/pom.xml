@@ -21,7 +21,8 @@
   <parent>
     <groupId>com.google</groupId>
     <artifactId>monacoinj-parent</artifactId>
-    <version>0.10.3-MB-ALICE-mona2</version>
+    <version>0.10.3-MB-ALICE-mona-kgw-test</version>
+
   </parent>
   <modelVersion>4.0.0</modelVersion>
 

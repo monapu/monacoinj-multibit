@@ -33,6 +33,7 @@ public class TestNet3Params extends NetworkParameters {
         // Genesis hash is a0d810b45c92ac12e8c5b312a680caafba52216e5d9649b9dd86f7ad6550a43f
         packetMagic = 0xfcc1b7dc; // correspond to pchMessageStart in main.cpp
         interval = INTERVAL;
+        switchKGWBlock = 0;
         targetTimespan = TARGET_TIMESPAN;
         proofOfWorkLimit = Utils.decodeCompactBits(0x1e0fffffL);
         port = 19401;
