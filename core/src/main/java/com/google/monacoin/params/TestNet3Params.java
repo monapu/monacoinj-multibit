@@ -50,8 +50,7 @@ public class TestNet3Params extends NetworkParameters {
         alertSigningKey = Hex.decode("04887665070e79d20f722857e58ec8f402733f710135521a0b63441419bf5665ba4623bed13fca0cb2338682ab2a54ad13ce07fbc81c3c2f0912a4eb8521dd3cfb");
 
         dnsSeeds = new String[] {
-                "testnet-seed.monacoin.petertodd.org",
-                "testnet-seed.bluematt.me"
+                "test-dnsseed.monacoin.org",
         };
     }
 
