@@ -30,23 +30,24 @@ public class TestNet3Params extends NetworkParameters {
     public TestNet3Params() {
         super();
         id = ID_TESTNET;
-        // Genesis hash is 000000000933ea01ad0ee984209779baaec3ced90fa3f408719526f8d77f4943
-        packetMagic = 0x0b110907;
+        // Genesis hash is a0d810b45c92ac12e8c5b312a680caafba52216e5d9649b9dd86f7ad6550a43f
+        packetMagic = 0xfcc1b7dc; // correspond to pchMessageStart in main.cpp
         interval = INTERVAL;
         targetTimespan = TARGET_TIMESPAN;
-        proofOfWorkLimit = Utils.decodeCompactBits(0x1d00ffffL);
-        port = 18333;
+        proofOfWorkLimit = Utils.decodeCompactBits(0x1e0fffffL);
+        port = 19401;
         addressHeader = 111;
         acceptableAddressCodes = new int[] { 111 };
         dumpedPrivateKeyHeader = 239;
-        genesisBlock.setTime(1296688602L);
-        genesisBlock.setDifficultyTarget(0x1d00ffffL);
-        genesisBlock.setNonce(414098458);
-        spendableCoinbaseDepth = 100;
-        subsidyDecreaseBlockCount = 210000;
+        genesisBlock.setTime(1388479759L);
+        genesisBlock.setDifficultyTarget(0x1e0ffff0L);
+        genesisBlock.setNonce(600389L);
+        spendableCoinbaseDepth = 100;  // equivalent to COINBASE_MATURITY ?
+        subsidyDecreaseBlockCount = 1051200;
         String genesisHash = genesisBlock.getHashAsString();
-        checkState(genesisHash.equals("000000000933ea01ad0ee984209779baaec3ced90fa3f408719526f8d77f4943"));
-        alertSigningKey = Hex.decode("04302390343f91cc401d56d68b123028bf52e5fca1939df127f63c6467cdf9c8e2c14b61104cf817d0b780da337893ecc4aaff1309e536162dabbdb45200ca2b0a");
+        // a0d810b45c92ac12e8c5b312a680caafba52216e5d9649b9dd86f7ad6550a43f
+        checkState(genesisHash.equals("a0d810b45c92ac12e8c5b312a680caafba52216e5d9649b9dd86f7ad6550a43f"));
+        alertSigningKey = Hex.decode("04887665070e79d20f722857e58ec8f402733f710135521a0b63441419bf5665ba4623bed13fca0cb2338682ab2a54ad13ce07fbc81c3c2f0912a4eb8521dd3cfb");
 
         dnsSeeds = new String[] {
                 "testnet-seed.monacoin.petertodd.org",

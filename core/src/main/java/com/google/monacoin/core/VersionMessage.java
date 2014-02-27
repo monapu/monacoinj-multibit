@@ -76,7 +76,7 @@ public class VersionMessage extends Message {
     public static final String BITCOINJ_VERSION = "0.10.3";
 
     /** The value that is prepended to the subVer field of this application. */
-    public static final String LIBRARY_SUBVER = "/BitCoinJ:" + BITCOINJ_VERSION + "/";
+    public static final String LIBRARY_SUBVER = "/MonaCoinJ:" + BITCOINJ_VERSION + "/";
 
     public VersionMessage(NetworkParameters params, byte[] msg) throws ProtocolException {
         super(params, msg, 0);
