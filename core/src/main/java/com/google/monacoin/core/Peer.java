@@ -141,7 +141,7 @@ public class Peer {
     // fork. As bitcoin didn't change the version message to distinguish client versions,
     // we must resort to this "hack". We set it to 50k although the fork happened around 42k.
     // This way we are sure not to kill nodes which are currently catching up themselves.
-    private final long MIN_PEER_BLOCK_HEIGHT = 50000;
+    private final long MIN_PEER_BLOCK_HEIGHT = 0;
 
     /**
      * Construct a peer that reads/writes from the given block chain.

@@ -863,15 +863,16 @@ public abstract class AbstractBlockChain {
         checkState(lock.isHeldByCurrentThread());
         // After 15th February 2012 the rules on the testnet change to avoid people running up the difficulty
         // and then leaving, making it too hard to mine a block. On non-difficulty transition points, easy
-        // blocks are allowed if there has been a span of 20 minutes without one.
+        // blocks are allowed if there has been a span of 1 * targetSpacing sec without one.
         final long timeDelta = next.getTimeSeconds() - prev.getTimeSeconds();
         // There is an integer underflow bug in monacoin-qt that means mindiff blocks are accepted when time
         // goes backwards.
-        if (timeDelta >= 0 && timeDelta <= NetworkParameters.TARGET_SPACING * 2) {
+        if (timeDelta >= 0 && timeDelta <= NetworkParameters.TARGET_SPACING * 1) {
             // Walk backwards until we find a block that doesn't have the easiest proof of work, then check
             // that difficulty is equal to that one.
             StoredBlock cursor = storedPrev;
-            while (!cursor.getHeader().equals(params.getGenesisBlock()) &&
+            // while (!cursor.getHeader().equals(params.getGenesisBlock()) &&
+            while (cursor.getPrev(blockStore) != null &&
                    cursor.getHeight() % params.getInterval() != 0 &&
                    cursor.getHeader().getDifficultyTargetAsInteger().equals(params.getProofOfWorkLimit()))
                 cursor = cursor.getPrev(blockStore);
