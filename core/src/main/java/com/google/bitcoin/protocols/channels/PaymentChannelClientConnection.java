@@ -17,10 +17,11 @@
 package com.google.bitcoin.protocols.channels;
 
 import com.google.bitcoin.core.ECKey;
+import com.google.bitcoin.core.InsufficientMoneyException;
 import com.google.bitcoin.core.Sha256Hash;
 import com.google.bitcoin.core.Wallet;
-import com.google.bitcoin.protocols.niowrapper.ProtobufClient;
-import com.google.bitcoin.protocols.niowrapper.ProtobufParser;
+import com.google.bitcoin.net.NioClient;
+import com.google.bitcoin.net.ProtobufParser;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 import org.bitcoin.paymentchannel.Protos;
@@ -30,8 +31,7 @@ import java.math.BigInteger;
 import java.net.InetSocketAddress;
 
 /**
- * Manages a {@link PaymentChannelClientState} by connecting to a server over TLS and exchanging the necessary data over
- * protobufs.
+ * A simple utility class that runs the micropayment protocol over a raw TCP socket using NIO, standalone.
  */
 public class PaymentChannelClientConnection {
     // Various futures which will be completed later
@@ -77,7 +77,7 @@ public class PaymentChannelClientConnection {
             }
 
             @Override
-            public void channelOpen() {
+            public void channelOpen(boolean wasInitiated) {
                 wireParser.setSocketTimeout(0);
                 // Inform the API user that we're done and ready to roll.
                 channelOpenFuture.set(PaymentChannelClientConnection.this);
@@ -88,7 +88,12 @@ public class PaymentChannelClientConnection {
         wireParser = new ProtobufParser<Protos.TwoWayChannelMessage>(new ProtobufParser.Listener<Protos.TwoWayChannelMessage>() {
             @Override
             public void messageReceived(ProtobufParser handler, Protos.TwoWayChannelMessage msg) {
-                channelClient.receiveMessage(msg);
+                try {
+                    channelClient.receiveMessage(msg);
+                } catch (InsufficientMoneyException e) {
+                    // We should only get this exception during INITIATE, so channelOpen wasn't called yet.
+                    channelOpenFuture.setException(e);
+                }
             }
 
             @Override
@@ -106,7 +111,7 @@ public class PaymentChannelClientConnection {
 
         // Initiate the outbound network connection. We don't need to keep this around. The wireParser object will handle
         // things from here on out.
-        new ProtobufClient(server, wireParser, timeoutSeconds * 1000);
+        new NioClient(server, wireParser, timeoutSeconds * 1000);
     }
 
     /**
@@ -129,8 +134,8 @@ public class PaymentChannelClientConnection {
      * @throws IllegalStateException If the channel has been closed or is not yet open
      *                               (see {@link PaymentChannelClientConnection#getChannelOpenFuture()} for the second)
      */
-    public synchronized void incrementPayment(BigInteger size) throws ValueOutOfRangeException, IllegalStateException {
-        channelClient.incrementPayment(size);
+    public ListenableFuture<BigInteger> incrementPayment(BigInteger size) throws ValueOutOfRangeException, IllegalStateException {
+        return channelClient.incrementPayment(size);
     }
 
     /**
@@ -140,35 +145,35 @@ public class PaymentChannelClientConnection {
      * <p>Note that if you call any methods which update state directly the server will not be notified and channel
      * initialization logic in the connection may fail unexpectedly.</p>
      */
-    public synchronized PaymentChannelClientState state() {
+    public PaymentChannelClientState state() {
         return channelClient.state();
     }
 
     /**
-     * Closes the connection, notifying the server it should close the channel by broadcasting the most recent payment
+     * Closes the connection, notifying the server it should settle the channel by broadcasting the most recent payment
      * transaction.
      */
-    public synchronized void close() {
+    public void settle() {
         // Shutdown is a little complicated.
         //
         // This call will cause the CLOSE message to be written to the wire, and then the destroyConnection() method that
         // we defined above will be called, which in turn will call wireParser.closeConnection(), which in turn will invoke
-        // ProtobufClient.closeConnection(), which will then close the socket triggering interruption of the network
+        // NioClient.closeConnection(), which will then close the socket triggering interruption of the network
         // thread it had created. That causes the background thread to die, which on its way out calls
         // ProtobufParser.connectionClosed which invokes the connectionClosed method we defined above which in turn
         // then configures the open-future correctly and closes the state object. Phew!
         try {
-            channelClient.close();
+            channelClient.settle();
         } catch (IllegalStateException e) {
             // Already closed...oh well
         }
     }
 
     /**
-     * Disconnects the network connection but doesn't request the server to close the channel first (literally just
+     * Disconnects the network connection but doesn't request the server to settle the channel first (literally just
      * unplugs the network socket and marks the stored channel state as inactive).
      */
-    public void disconnectWithoutChannelClose() {
+    public void disconnectWithoutSettlement() {
         wireParser.closeConnection();
     }
 }

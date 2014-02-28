@@ -181,7 +181,7 @@ public class BlockChainTest {
         Block prev = unitTestParams.getGenesisBlock();
         Utils.setMockClock(System.currentTimeMillis()/1000);
         for (int i = 0; i < unitTestParams.getInterval() - 1; i++) {
-            Block newBlock = prev.createNextBlock(coinbaseTo, Utils.now().getTime()/1000);
+            Block newBlock = prev.createNextBlock(coinbaseTo, Utils.currentTimeMillis()/1000);
             assertTrue(chain.add(newBlock));
             prev = newBlock;
             // The fake chain should seem to be "fast" for the purposes of difficulty calculations.
@@ -189,13 +189,13 @@ public class BlockChainTest {
         }
         // Now add another block that has no difficulty adjustment, it should be rejected.
         try {
-            chain.add(prev.createNextBlock(coinbaseTo, Utils.now().getTime()/1000));
+            chain.add(prev.createNextBlock(coinbaseTo, Utils.currentTimeMillis()/1000));
             fail();
         } catch (VerificationException e) {
         }
         // Create a new block with the right difficulty target given our blistering speed relative to the huge amount
         // of time it's supposed to take (set in the unit test network parameters).
-        Block b = prev.createNextBlock(coinbaseTo, Utils.now().getTime()/1000);
+        Block b = prev.createNextBlock(coinbaseTo, Utils.currentTimeMillis()/1000);
         b.setDifficultyTarget(0x201fFFFFL);
         b.solve();
         assertTrue(chain.add(b));
@@ -308,8 +308,11 @@ public class BlockChainTest {
         assertTrue(!coinbaseTransaction.isMature());
 
         // Attempt to spend the coinbase - this should fail as the coinbase is not mature yet.
-        Transaction coinbaseSpend = wallet.createSend(addressToSendTo, Utils.toNanoCoins(49, 0));
-        assertNull(coinbaseSpend);
+        try {
+            wallet.createSend(addressToSendTo, Utils.toNanoCoins(49, 0));
+            fail();
+        } catch (InsufficientMoneyException e) {
+        }
 
         // Check that the coinbase is unavailable to spend for the next spendableCoinbaseDepth - 2 blocks.
         for (int i = 0; i < unitTestParams.getSpendableCoinbaseDepth() - 2; i++) {
@@ -328,8 +331,11 @@ public class BlockChainTest {
             assertTrue(!coinbaseTransaction.isMature());
 
             // Attempt to spend the coinbase - this should fail.
-            coinbaseSpend = wallet.createSend(addressToSendTo, Utils.toNanoCoins(49, 0));
-            assertNull(coinbaseSpend);
+            try {
+                wallet.createSend(addressToSendTo, Utils.toNanoCoins(49, 0));
+                fail();
+            } catch (InsufficientMoneyException e) {
+            }
         }
 
         // Give it one more block - should now be able to spend coinbase transaction. Non relevant tx.
@@ -392,5 +398,32 @@ public class BlockChainTest {
         Date d = prod.estimateBlockTime(200000);
         // The actual date of block 200,000 was 2012-09-22 10:47:00
         assertEquals(new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ").parse("2012-10-23T08:35:05.000-0700"), d);
+    }
+
+    @Test
+    public void falsePositives() throws Exception {
+        double decay = AbstractBlockChain.FP_ESTIMATOR_ALPHA;
+        assertTrue(0 == chain.getFalsePositiveRate()); // Exactly
+        chain.trackFalsePositives(55);
+        assertEquals(decay * 55, chain.getFalsePositiveRate(), 1e-4);
+        chain.trackFilteredTransactions(550);
+        double rate1 = chain.getFalsePositiveRate();
+        // Run this scenario a few more time for the filter to converge
+        for (int i = 1 ; i < 10 ; i++) {
+            chain.trackFalsePositives(55);
+            chain.trackFilteredTransactions(550);
+        }
+
+        // Ensure we are within 10%
+        assertEquals(0.1, chain.getFalsePositiveRate(), 0.01);
+
+        // Check that we get repeatable results after a reset
+        chain.resetFalsePositiveEstimate();
+        assertTrue(0 == chain.getFalsePositiveRate()); // Exactly
+
+        chain.trackFalsePositives(55);
+        assertEquals(decay * 55, chain.getFalsePositiveRate(), 1e-4);
+        chain.trackFilteredTransactions(550);
+        assertEquals(rate1, chain.getFalsePositiveRate(), 1e-4);
     }
 }

@@ -17,12 +17,13 @@
 package com.google.bitcoin.core;
 
 import com.google.bitcoin.script.Script;
-import com.google.common.base.Preconditions;
 
+import javax.annotation.Nullable;
 import java.io.IOException;
 import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.io.Serializable;
+import java.lang.ref.WeakReference;
 import java.util.Map;
 
 import com.google.bitcoin.IsMultiBitClass;
@@ -54,7 +55,7 @@ public class TransactionInput extends ChildMessage implements Serializable, IsMu
     private byte[] scriptBytes;
     // The Script object obtained from parsing scriptBytes. Only filled in on demand and if the transaction is not
     // coinbase.
-    transient private Script scriptSig;
+    transient private WeakReference<Script> scriptSig;
     // A pointer to the transaction that owns this input.
     private Transaction parentTransaction;
 
@@ -70,15 +71,13 @@ public class TransactionInput extends ChildMessage implements Serializable, IsMu
         length = 40 + (scriptBytes == null ? 1 : VarInt.sizeOf(scriptBytes.length) + scriptBytes.length);
     }
 
-    public TransactionInput(NetworkParameters params, Transaction parentTransaction,
-            byte[] scriptBytes,
-            TransactionOutPoint outpoint) {
+    public TransactionInput(NetworkParameters params, @Nullable Transaction parentTransaction, byte[] scriptBytes,
+                            TransactionOutPoint outpoint) {
         super(params);
         this.scriptBytes = scriptBytes;
         this.outpoint = outpoint;
         this.sequence = NO_SEQUENCE;
         this.parentTransaction = parentTransaction;
-
         length = 40 + (scriptBytes == null ? 1 : VarInt.sizeOf(scriptBytes.length) + scriptBytes.length);
     }
 
@@ -163,16 +162,19 @@ public class TransactionInput extends ChildMessage implements Serializable, IsMu
     public Script getScriptSig() throws ScriptException {
         // Transactions that generate new coins don't actually have a script. Instead this
         // parameter is overloaded to be something totally different.
-        if (scriptSig == null) {
+        Script script = scriptSig == null ? null : scriptSig.get();
+        if (script == null) {
             maybeParse();
-            scriptSig = new Script(Preconditions.checkNotNull(scriptBytes));
+            script = new Script(scriptBytes);
+            scriptSig = new WeakReference<Script>(script);
+            return script;
         }
-        return scriptSig;
+        return script;
     }
 
     /** Set the given program as the scriptSig that is supposed to satisfy the connected output script. */
     public void setScriptSig(Script scriptSig) {
-        this.scriptSig = checkNotNull(scriptSig);
+        this.scriptSig = new WeakReference<Script>(checkNotNull(scriptSig));
         // TODO: This should all be cleaned up so we have a consistent internal representation.
         setScriptBytes(scriptSig.getProgram());
     }
@@ -281,12 +283,12 @@ public class TransactionInput extends ChildMessage implements Serializable, IsMu
      *
      * @return The TransactionOutput or null if the transactions map doesn't contain the referenced tx.
      */
+    @Nullable
     TransactionOutput getConnectedOutput(Map<Sha256Hash, Transaction> transactions) {
         Transaction tx = transactions.get(outpoint.getHash());
         if (tx == null)
             return null;
-        TransactionOutput out = tx.getOutputs().get((int) outpoint.getIndex());
-        return out;
+        return tx.getOutputs().get((int) outpoint.getIndex());
     }
 
     public enum ConnectMode {
@@ -417,6 +419,7 @@ public class TransactionInput extends ChildMessage implements Serializable, IsMu
      * {@link TransactionInput#connect(TransactionOutput)} or variants at some point. If it wasn't connected, then
      * this method returns null.
      */
+    @Nullable
     public TransactionOutput getConnectedOutput() {
         return getOutpoint().getConnectedOutput();
     }

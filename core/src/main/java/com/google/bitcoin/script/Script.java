@@ -19,6 +19,7 @@ package com.google.bitcoin.script;
 
 import com.google.bitcoin.core.*;
 import com.google.bitcoin.crypto.TransactionSignature;
+import com.google.bitcoin.params.MainNetParams;
 import com.google.common.collect.Lists;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -61,6 +62,9 @@ public class Script {
     // must preserve the exact bytes that we read off the wire, along with the parsed form.
     protected byte[] program;
 
+    // Creation time of the associated keys in seconds since the epoch.
+    private long creationTimeSeconds;
+
     /** Creates an empty script that serializes to nothing. */
     private Script() {
         chunks = Lists.newArrayList();
@@ -69,6 +73,7 @@ public class Script {
     // Used from ScriptBuilder.
     Script(List<ScriptChunk> chunks) {
         this.chunks = Collections.unmodifiableList(new ArrayList<ScriptChunk>(chunks));
+        creationTimeSeconds = Utils.currentTimeMillis() / 1000;
     }
 
     /**
@@ -79,10 +84,25 @@ public class Script {
     public Script(byte[] programBytes) throws ScriptException {
         program = programBytes;
         parse(programBytes);
+        creationTimeSeconds = Utils.currentTimeMillis() / 1000;
+    }
+
+    public Script(byte[] programBytes, long creationTimeSeconds) throws ScriptException {
+        program = programBytes;
+        parse(programBytes);
+        this.creationTimeSeconds = creationTimeSeconds;
+    }
+
+    public long getCreationTimeSeconds() {
+        return creationTimeSeconds;
+    }
+
+    public void setCreationTimeSeconds(long creationTimeSeconds) {
+        this.creationTimeSeconds = creationTimeSeconds;
     }
 
     /**
-     * Returns the program opcodes as a string, for example "[1234] DUP HAHS160"
+     * Returns the program opcodes as a string, for example "[1234] DUP HASH160"
      */
     public String toString() {
         StringBuilder buf = new StringBuilder();
@@ -97,7 +117,7 @@ public class Script {
                 buf.append("] ");
             }
         }
-        return buf.toString();
+        return buf.toString().trim();
     }
 
     /** Returns the serialized program as a newly created byte array. */
@@ -110,7 +130,8 @@ public class Script {
             for (ScriptChunk chunk : chunks) {
                 chunk.write(bos);
             }
-            return bos.toByteArray();
+            program = bos.toByteArray();
+            return program;
         } catch (IOException e) {
             throw new RuntimeException(e);  // Cannot happen.
         }
@@ -119,6 +140,19 @@ public class Script {
     /** Returns an immutable list of the scripts parsed form. */
     public List<ScriptChunk> getChunks() {
         return Collections.unmodifiableList(chunks);
+    }
+
+    private static final ScriptChunk INTERN_TABLE[];
+
+    static {
+        Script examplePayToAddress = ScriptBuilder.createOutputScript(new Address(MainNetParams.get(), new byte[20]));
+        examplePayToAddress = new Script(examplePayToAddress.getProgram());
+        INTERN_TABLE = new ScriptChunk[] {
+                examplePayToAddress.chunks.get(0),  // DUP
+                examplePayToAddress.chunks.get(1),  // HASH160
+                examplePayToAddress.chunks.get(3),  // EQUALVERIFY
+                examplePayToAddress.chunks.get(4),  // CHECKSIG
+        };
     }
 
     /**
@@ -131,7 +165,7 @@ public class Script {
      * The official client does something similar.</p>
      */
     private void parse(byte[] program) throws ScriptException {
-        chunks = new ArrayList<ScriptChunk>(10);  // Arbitrary choice.
+        chunks = new ArrayList<ScriptChunk>(5);   // Common size.
         ByteArrayInputStream bis = new ByteArrayInputStream(program);
         int initialSize = bis.available();
         while (bis.available() > 0) {
@@ -156,15 +190,24 @@ public class Script {
                 dataToRead = ((long)bis.read()) | (((long)bis.read()) << 8) | (((long)bis.read()) << 16) | (((long)bis.read()) << 24);
             }
 
+            ScriptChunk chunk;
             if (dataToRead == -1) {
-                chunks.add(new ScriptChunk(true, new byte[]{(byte) opcode}, startLocationInProgram));
+                chunk = new ScriptChunk(true, new byte[]{(byte) opcode}, startLocationInProgram);
             } else {
                 if (dataToRead > bis.available())
                     throw new ScriptException("Push of data element that is larger than remaining data");
                 byte[] data = new byte[(int)dataToRead];
                 checkState(dataToRead == 0 || bis.read(data, 0, (int)dataToRead) == dataToRead);
-                chunks.add(new ScriptChunk(false, data, startLocationInProgram));
+                chunk = new ScriptChunk(false, data, startLocationInProgram);
             }
+            // Save some memory by eliminating redundant copies of the same chunk objects. INTERN_TABLE can be null
+            // here because this method is called whilst setting it up.
+            if (INTERN_TABLE != null) {
+                for (ScriptChunk c : INTERN_TABLE) {
+                    if (c.equals(chunk)) chunk = c;
+                }
+            }
+            chunks.add(chunk);
         }
     }
 
@@ -195,16 +238,30 @@ public class Script {
     }
 
     /**
+     * Returns true if this script is of the form OP_HASH160 <scriptHash> OP_EQUAL, ie, payment to an
+     * address like 35b9vsyH1KoFT5a5KtrKusaCcPLkiSo1tU. This form was codified as part of BIP13 and BIP16,
+     * for pay to script hash type addresses.
+     */
+    public boolean isSentToP2SH() {
+        return chunks.size() == 3 &&
+               chunks.get(0).equalsOpCode(OP_HASH160) &&
+               chunks.get(1).data.length == Address.LENGTH &&
+               chunks.get(2).equalsOpCode(OP_EQUAL);
+    }
+
+    /**
      * If a program matches the standard template DUP HASH160 <pubkey hash> EQUALVERIFY CHECKSIG
      * then this function retrieves the third element, otherwise it throws a ScriptException.<p>
      *
      * This is useful for fetching the destination address of a transaction.
      */
     public byte[] getPubKeyHash() throws ScriptException {
-        if (!isSentToAddress())
+        if (isSentToAddress())
+            return chunks.get(2).data;
+        else if (isSentToP2SH())
+            return chunks.get(1).data;
+        else
             throw new ScriptException("Script not in the standard scriptPubKey form");
-        // Otherwise, the third element is the hash of the public key, ie the bitcoin address.
-        return chunks.get(2).data;
     }
 
     /**
@@ -242,11 +299,14 @@ public class Script {
 
     /**
      * Gets the destination address from this script, if it's in the required form (see getPubKey).
-     *
-     * @throws ScriptException
      */
     public Address getToAddress(NetworkParameters params) throws ScriptException {
-        return new Address(params, getPubKeyHash());
+        if (isSentToAddress())
+            return new Address(params, getPubKeyHash());
+        else if (isSentToP2SH())
+            return Address.fromP2SHScript(params, this);
+        else
+            throw new ScriptException("Cannot cast this script to a pay-to-address type");
     }
 
     ////////////////////// Interface for writing scripts from scratch ////////////////////////////////
@@ -348,14 +408,14 @@ public class Script {
     }
 
     /**
-     * Converts an opcode to its int representation
+     * Converts an opcode to its int representation (including OP_1NEGATE and OP_0/OP_FALSE)
      * @throws IllegalArgumentException If the opcode is not an OP_N opcode
      */
     public static int decodeFromOpN(byte opcode) throws IllegalArgumentException {
         return decodeFromOpN((int)opcode);
     }
     static int decodeFromOpN(int opcode) {
-        checkArgument(opcode >= -1 && opcode <= OP_16, "decodeFromOpN called on non OP_N opcode");
+        checkArgument((opcode == OP_0 || opcode == OP_1NEGATE) || (opcode >= OP_1 && opcode <= OP_16), "decodeFromOpN called on non OP_N opcode");
         if (opcode == OP_0)
             return 0;
         else if (opcode == OP_1NEGATE)
@@ -444,12 +504,12 @@ public class Script {
             ScriptChunk m = chunks.get(chunks.size() - 2);
             if (!m.isOpCode()) return false;
             int numKeys = decodeFromOpN(m.data[0]);
-            if (chunks.size() != 3 + numKeys) return false;
+            if (numKeys < 1 || chunks.size() != 3 + numKeys) return false;
             for (int i = 1; i < chunks.size() - 2; i++) {
                 if (chunks.get(i).isOpCode()) return false;
             }
             // First chunk must be an OP_N opcode too.
-            decodeFromOpN(chunks.get(0).data[0]);
+            if (decodeFromOpN(chunks.get(0).data[0]) < 1) return false;
         } catch (IllegalStateException e) {
             return false;   // Not an OP_N opcode.
         }
@@ -481,7 +541,7 @@ public class Script {
             if (opcode >= 0 && opcode < OP_PUSHDATA1) {
                 additionalBytes = opcode;
             } else if (opcode == OP_PUSHDATA1) {
-                additionalBytes = inputScript[cursor] + 1;
+                additionalBytes = (0xFF & inputScript[cursor]) + 1;
             } else if (opcode == OP_PUSHDATA2) {
                 additionalBytes = ((0xFF & inputScript[cursor]) |
                                   ((0xFF & inputScript[cursor+1]) << 8)) + 2;
@@ -1044,8 +1104,6 @@ public class Script {
             throw new ScriptException("Attempted OP_CHECKSIG(VERIFY) on a stack with size < 2");
         byte[] pubKey = stack.pollLast();
         byte[] sigBytes = stack.pollLast();
-        if (sigBytes.length == 0 || pubKey.length == 0)
-            throw new ScriptException("Attempted OP_CHECKSIG(VERIFY) with a sig or pubkey of length 0");
 
         byte[] prog = script.getProgram();
         byte[] connectedScript = Arrays.copyOfRange(prog, lastCodeSepLocation, prog.length);
@@ -1093,8 +1151,6 @@ public class Script {
         LinkedList<byte[]> pubkeys = new LinkedList<byte[]>();
         for (int i = 0; i < pubKeyCount; i++) {
             byte[] pubKey = stack.pollLast();
-            if (pubKey.length == 0)
-                throw new ScriptException("Attempted OP_CHECKMULTISIG(VERIFY) with a pubkey of length 0");
             pubkeys.add(pubKey);
         }
 
@@ -1107,8 +1163,6 @@ public class Script {
         LinkedList<byte[]> sigs = new LinkedList<byte[]>();
         for (int i = 0; i < sigCount; i++) {
             byte[] sig = stack.pollLast();
-            if (sig.length == 0)
-                throw new ScriptException("Attempted OP_CHECKMULTISIG(VERIFY) with a sig of length 0");
             sigs.add(sig);
         }
 
@@ -1221,5 +1275,26 @@ public class Script {
             if (!castToBool(p2shStack.pollLast()))
                 throw new ScriptException("P2SH script execution resulted in a non-true stack");
         }
+    }
+
+    // Utility that doesn't copy for internal use
+    private byte[] getQuickProgram() {
+        if (program != null)
+            return program;
+        return getProgram();
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (!(obj instanceof Script))
+            return false;
+        Script s = (Script)obj;
+        return Arrays.equals(getQuickProgram(), s.getQuickProgram());
+    }
+
+    @Override
+    public int hashCode() {
+        byte[] bytes = getQuickProgram();
+        return Arrays.hashCode(bytes);
     }
 }

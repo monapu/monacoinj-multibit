@@ -22,6 +22,7 @@ import com.google.bitcoin.store.FullPrunedBlockStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.annotation.Nullable;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.LinkedList;
@@ -44,6 +45,9 @@ public class FullPrunedBlockChain extends AbstractBlockChain {
     
     /** Keeps a map of block hashes to StoredBlocks. */
     protected final FullPrunedBlockStore blockStore;
+
+    // Whether or not to execute scriptPubKeys before accepting a transaction (i.e. check signatures).
+    private boolean runScripts = true;
 
     /**
      * Constructs a BlockChain connected to the given wallet and store. To obtain a {@link Wallet} you can construct
@@ -94,19 +98,34 @@ public class FullPrunedBlockChain extends AbstractBlockChain {
     protected boolean shouldVerifyTransactions() {
         return true;
     }
+
+    /**
+     * Whether or not to run scripts whilst accepting blocks (i.e. checking signatures, for most transactions).
+     * If you're accepting data from an untrusted node, such as one found via the P2P network, this should be set
+     * to true (which is the default). If you're downloading a chain from a node you control, script execution
+     * is redundant because you know the connected node won't relay bad data to you. In that case it's safe to set
+     * this to false and obtain a significant speedup.
+     */
+    public void setRunScripts(boolean value) {
+        this.runScripts = value;
+    }
     
     //TODO: Remove lots of duplicated code in the two connectTransactions
     
     // TODO: execute in order of largest transaction (by input count) first
     ExecutorService scriptVerificationExecutor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
-    
-    class Verifyer implements Callable<VerificationException> {
+
+    /** A job submitted to the executor which verifies signatures. */
+    private static class Verifier implements Callable<VerificationException> {
         final Transaction tx;
         final List<Script> prevOutScripts;
         final boolean enforcePayToScriptHash;
-        Verifyer(final Transaction tx, final List<Script> prevOutScripts, final boolean enforcePayToScriptHash) {
+
+        public Verifier(final Transaction tx, final List<Script> prevOutScripts, final boolean enforcePayToScriptHash) {
             this.tx = tx; this.prevOutScripts = prevOutScripts; this.enforcePayToScriptHash = enforcePayToScriptHash;
         }
+
+        @Nullable
         @Override
         public VerificationException call() throws Exception {
             try{
@@ -215,9 +234,9 @@ public class FullPrunedBlockChain extends AbstractBlockChain {
                     totalFees = totalFees.add(valueIn.subtract(valueOut));
                 }
                 
-                if (!isCoinBase) {
+                if (!isCoinBase && runScripts) {
                     // Because correctlySpends modifies transactions, this must come after we are done with tx
-                    FutureTask<VerificationException> future = new FutureTask<VerificationException>(new Verifyer(tx, prevOutScripts, enforcePayToScriptHash));
+                    FutureTask<VerificationException> future = new FutureTask<VerificationException>(new Verifier(tx, prevOutScripts, enforcePayToScriptHash));
                     scriptVerificationExecutor.execute(future);
                     listScriptVerificationResults.add(future);
                 }
@@ -339,7 +358,7 @@ public class FullPrunedBlockChain extends AbstractBlockChain {
                     
                     if (!isCoinBase) {
                         // Because correctlySpends modifies transactions, this must come after we are done with tx
-                        FutureTask<VerificationException> future = new FutureTask<VerificationException>(new Verifyer(tx, prevOutScripts, enforcePayToScriptHash));
+                        FutureTask<VerificationException> future = new FutureTask<VerificationException>(new Verifier(tx, prevOutScripts, enforcePayToScriptHash));
                         scriptVerificationExecutor.execute(future);
                         listScriptVerificationResults.add(future);
                     }

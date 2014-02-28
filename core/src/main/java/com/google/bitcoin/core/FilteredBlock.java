@@ -42,7 +42,11 @@ public class FilteredBlock extends Message {
     }
     
     public void bitcoinSerializeToStream(OutputStream stream) throws IOException {
-        throw new RuntimeException("Not implemented");
+        if (header.transactions == null)
+            header.bitcoinSerializeToStream(stream);
+        else
+            header.cloneAsHeader().bitcoinSerializeToStream(stream);
+        merkleTree.bitcoinSerializeToStream(stream);
     }
 
     @Override
@@ -105,5 +109,10 @@ public class FilteredBlock extends Message {
     /** Gets the set of transactions which were provided using provideTransaction() which match in getTransactionHashes() */
     public Map<Sha256Hash, Transaction> getAssociatedTransactions() {
         return Collections.unmodifiableMap(associatedTransactions);
+    }
+
+    /** Number of transactions in this block, before it was filtered */
+    public int getTransactionCount() {
+        return merkleTree.transactionCount;
     }
 }

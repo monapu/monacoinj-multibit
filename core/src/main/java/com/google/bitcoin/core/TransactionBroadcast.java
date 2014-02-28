@@ -102,7 +102,7 @@ public class TransactionBroadcast {
             Collections.shuffle(peers, random);
             peers = peers.subList(0, numToBroadcastTo);
             log.info("broadcastTransaction: We have {} peers, adding {} to the memory pool and sending to {} peers, will wait for {}: {}",
-                    new Object[] { numConnected, tx.getHashAsString(), numToBroadcastTo, numWaitingFor, Joiner.on(",").join(peers) });
+                    numConnected, tx.getHashAsString(), numToBroadcastTo, numWaitingFor, Joiner.on(",").join(peers));
             for (Peer peer : peers) {
                 try {
                     peer.sendMessage(pinnedTx);
@@ -128,8 +128,8 @@ public class TransactionBroadcast {
             final TransactionConfidence conf = tx.getConfidence();
             int numSeenPeers = conf.numBroadcastPeers();
             boolean mined = tx.getAppearsInHashes() != null;
-            log.info("broadcastTransaction: {}:  TX {} seen by {} peers{}", new Object[] { reason, pinnedTx.getHashAsString(),
-                    numSeenPeers, mined ? " and mined" : "" });
+            log.info("broadcastTransaction: {}:  TX {} seen by {} peers{}", reason, pinnedTx.getHashAsString(),
+                    numSeenPeers, mined ? " and mined" : "");
             if (numSeenPeers >= numWaitingFor || mined) {
                 // We've seen the min required number of peers announce the transaction, or it was included
                 // in a block. Normally we'd expect to see it fully propagate before it gets mined, but

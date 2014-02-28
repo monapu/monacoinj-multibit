@@ -1,13 +1,32 @@
+/*
+ * Copyright 2013 Google Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package com.google.bitcoin.protocols.channels;
 
 import com.google.bitcoin.core.*;
 import com.google.bitcoin.protocols.channels.PaymentChannelCloseException.CloseReason;
 import com.google.bitcoin.utils.Threading;
+import com.google.common.util.concurrent.FutureCallback;
+import com.google.common.util.concurrent.Futures;
 import com.google.protobuf.ByteString;
 import net.jcip.annotations.GuardedBy;
 import org.bitcoin.paymentchannel.Protos;
 import org.slf4j.LoggerFactory;
 
+import javax.annotation.Nullable;
 import java.math.BigInteger;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -85,12 +104,12 @@ public class PaymentChannelServer {
          */
         public void paymentIncrease(BigInteger by, BigInteger to);
     }
-    @GuardedBy("lock") private final ServerConnection conn;
+    private final ServerConnection conn;
 
     // Used to keep track of whether or not the "socket" ie connection is open and we can generate messages
     @GuardedBy("lock") private boolean connectionOpen = false;
-    // Indicates that no further messages should be sent and we intend to close the connection
-    @GuardedBy("lock") private boolean connectionClosing = false;
+    // Indicates that no further messages should be sent and we intend to settle the connection
+    @GuardedBy("lock") private boolean channelSettling = false;
 
     // The wallet and peergroup which are used to complete/broadcast transactions
     private final Wallet wallet;
@@ -125,7 +144,7 @@ public class PaymentChannelServer {
      *               Unlike {@link PaymentChannelClient}, this does not have to already contain a StoredState manager
      * @param minAcceptedChannelSize The minimum value the client must lock into this channel. A value too large will be
      *                               rejected by clients, and a value too low will require excessive channel reopening
-     *                               and may cause fees to be require to close the channel. A reasonable value depends
+     *                               and may cause fees to be require to settle the channel. A reasonable value depends
      *                               entirely on the expected maximum for the channel, and should likely be somewhere
      *                               between a few bitcents and a bitcoin.
      * @param conn A callback listener which represents the connection to the client (forwards messages we generate to
@@ -139,10 +158,26 @@ public class PaymentChannelServer {
         this.conn = checkNotNull(conn);
     }
 
+    /**
+     * Returns the underlying {@link PaymentChannelServerState} object that is being manipulated. This object allows
+     * you to learn how much money has been transferred, etc. May be null if the channel wasn't negotiated yet.
+     */
+    @Nullable
+    public PaymentChannelServerState state() {
+        return state;
+    }
+
     @GuardedBy("lock")
     private void receiveVersionMessage(Protos.TwoWayChannelMessage msg) throws VerificationException {
+        checkState(step == InitStep.WAITING_ON_CLIENT_VERSION && msg.hasClientVersion());
+        if (msg.getClientVersion().getMajor() != 1) {
+            error("This server needs protocol v1", Protos.Error.ErrorCode.NO_ACCEPTABLE_VERSION,
+                    CloseReason.NO_ACCEPTABLE_VERSION);
+            return;
+        }
+
         Protos.ServerVersion.Builder versionNegotiationBuilder = Protos.ServerVersion.newBuilder()
-                .setMajor(0).setMinor(1);
+                .setMajor(1).setMinor(0);
         conn.sendToClient(Protos.TwoWayChannelMessage.newBuilder()
                 .setType(Protos.TwoWayChannelMessage.MessageType.SERVER_VERSION)
                 .setServerVersion(versionNegotiationBuilder)
@@ -178,18 +213,20 @@ public class PaymentChannelServer {
                 log.error(" ... but we do not have any stored channels! Resume failed.");
             }
         }
-        log.info("Got initial version message, responding with VERSIONS and INITIATE");
+        log.info("Got initial version message, responding with VERSIONS and INITIATE: min value={}",
+                minAcceptedChannelSize.longValue());
 
         myKey = new ECKey();
         wallet.addKey(myKey);
 
-        expireTime = Utils.now().getTime() / 1000 + timeWindow;
+        expireTime = Utils.currentTimeMillis() / 1000 + timeWindow;
         step = InitStep.WAITING_ON_UNSIGNED_REFUND;
 
         Protos.Initiate.Builder initiateBuilder = Protos.Initiate.newBuilder()
                 .setMultisigKey(ByteString.copyFrom(myKey.getPubKey()))
                 .setExpireTimeSecs(expireTime)
-                .setMinAcceptedChannelSize(minAcceptedChannelSize.longValue());
+                .setMinAcceptedChannelSize(minAcceptedChannelSize.longValue())
+                .setMinPayment(Transaction.REFERENCE_DEFAULT_MIN_TX_FEE.longValue());
 
         conn.sendToClient(Protos.TwoWayChannelMessage.newBuilder()
                 .setInitiate(initiateBuilder)
@@ -218,12 +255,29 @@ public class PaymentChannelServer {
                 .build());
     }
 
-    private void multisigContractPropogated(Sha256Hash contractHash) {
+    private void multisigContractPropogated(Protos.ProvideContract providedContract, Sha256Hash contractHash) {
         lock.lock();
         try {
-            if (!connectionOpen || connectionClosing)
+            if (!connectionOpen || channelSettling)
                 return;
             state.storeChannelInWallet(PaymentChannelServer.this);
+            try {
+                receiveUpdatePaymentMessage(providedContract.getInitialPayment(), false /* no ack msg */);
+            } catch (VerificationException e) {
+                log.error("Initial payment failed to verify", e);
+                error(e.getMessage(), Protos.Error.ErrorCode.BAD_TRANSACTION, CloseReason.REMOTE_SENT_INVALID_MESSAGE);
+                return;
+            } catch (ValueOutOfRangeException e) {
+                log.error("Initial payment value was out of range", e);
+                error(e.getMessage(), Protos.Error.ErrorCode.BAD_TRANSACTION, CloseReason.REMOTE_SENT_INVALID_MESSAGE);
+                return;
+            } catch (InsufficientMoneyException e) {
+                // This shouldn't happen because the server shouldn't allow itself to get into this situation in the
+                // first place, by specifying a min up front payment.
+                log.error("Tried to settle channel and could not afford the fees whilst updating payment", e);
+                error(e.getMessage(), Protos.Error.ErrorCode.BAD_TRANSACTION, CloseReason.REMOTE_SENT_INVALID_MESSAGE);
+                return;
+            }
             conn.sendToClient(Protos.TwoWayChannelMessage.newBuilder()
                     .setType(Protos.TwoWayChannelMessage.MessageType.CHANNEL_OPEN)
                     .build());
@@ -238,7 +292,7 @@ public class PaymentChannelServer {
     private void receiveContractMessage(Protos.TwoWayChannelMessage msg) throws VerificationException {
         checkState(step == InitStep.WAITING_ON_CONTRACT && msg.hasProvideContract());
         log.info("Got contract, broadcasting and responding with CHANNEL_OPEN");
-        Protos.ProvideContract providedContract = msg.getProvideContract();
+        final Protos.ProvideContract providedContract = msg.getProvideContract();
 
         //TODO notify connection handler that timeout should be significantly extended as we wait for network propagation?
         final Transaction multisigContract = new Transaction(wallet.getParams(), providedContract.getTx().toByteArray());
@@ -247,23 +301,33 @@ public class PaymentChannelServer {
                 .addListener(new Runnable() {
                     @Override
                     public void run() {
-                        multisigContractPropogated(multisigContract.getHash());
+                        multisigContractPropogated(providedContract, multisigContract.getHash());
                     }
                 }, Threading.SAME_THREAD);
     }
 
     @GuardedBy("lock")
-    private void receiveUpdatePaymentMessage(Protos.TwoWayChannelMessage msg) throws VerificationException, ValueOutOfRangeException {
-        checkState(step == InitStep.CHANNEL_OPEN && msg.hasUpdatePayment());
+    private void receiveUpdatePaymentMessage(Protos.UpdatePayment msg, boolean sendAck) throws VerificationException, ValueOutOfRangeException, InsufficientMoneyException {
         log.info("Got a payment update");
 
-        Protos.UpdatePayment updatePayment = msg.getUpdatePayment();
         BigInteger lastBestPayment = state.getBestValueToMe();
-        state.incrementPayment(BigInteger.valueOf(updatePayment.getClientChangeValue()), updatePayment.getSignature().toByteArray());
+        final BigInteger refundSize = BigInteger.valueOf(msg.getClientChangeValue());
+        boolean stillUsable = state.incrementPayment(refundSize, msg.getSignature().toByteArray());
         BigInteger bestPaymentChange = state.getBestValueToMe().subtract(lastBestPayment);
 
         if (bestPaymentChange.compareTo(BigInteger.ZERO) > 0)
             conn.paymentIncrease(bestPaymentChange, state.getBestValueToMe());
+
+        if (sendAck) {
+            Protos.TwoWayChannelMessage.Builder ack = Protos.TwoWayChannelMessage.newBuilder();
+            ack.setType(Protos.TwoWayChannelMessage.MessageType.PAYMENT_ACK);
+            conn.sendToClient(ack.build());
+        }
+
+        if (!stillUsable) {
+            log.info("Channel is now fully exhausted, closing/initiating settlement");
+            settlePayment(CloseReason.CHANNEL_EXHAUSTED);
+        }
     }
 
     /**
@@ -274,7 +338,7 @@ public class PaymentChannelServer {
         lock.lock();
         try {
             checkState(connectionOpen);
-            if (connectionClosing)
+            if (channelSettling)
                 return;
             // If we generate an error, we set errorBuilder and closeReason and break, otherwise we return
             Protos.Error.Builder errorBuilder;
@@ -282,14 +346,6 @@ public class PaymentChannelServer {
             try {
                 switch (msg.getType()) {
                     case CLIENT_VERSION:
-                        checkState(step == InitStep.WAITING_ON_CLIENT_VERSION && msg.hasClientVersion());
-                        if (msg.getClientVersion().getMajor() != 0) {
-                            errorBuilder = Protos.Error.newBuilder()
-                                    .setCode(Protos.Error.ErrorCode.NO_ACCEPTABLE_VERSION);
-                            closeReason = CloseReason.NO_ACCEPTABLE_VERSION;
-                            break;
-                        }
-
                         receiveVersionMessage(msg);
                         return;
                     case PROVIDE_REFUND:
@@ -299,14 +355,11 @@ public class PaymentChannelServer {
                         receiveContractMessage(msg);
                         return;
                     case UPDATE_PAYMENT:
-                        receiveUpdatePaymentMessage(msg);
+                        checkState(step == InitStep.CHANNEL_OPEN && msg.hasUpdatePayment());
+                        receiveUpdatePaymentMessage(msg.getUpdatePayment(), true);
                         return;
                     case CLOSE:
-                        log.info("Got CLOSE message, closing channel");
-                        connectionClosing = true;
-                        if (state != null)
-                            state.close();
-                        conn.destroyConnection(CloseReason.CLIENT_REQUESTED_CLOSE);
+                        receiveCloseMessage();
                         return;
                     case ERROR:
                         checkState(msg.hasError());
@@ -315,38 +368,80 @@ public class PaymentChannelServer {
                         conn.destroyConnection(CloseReason.REMOTE_SENT_ERROR);
                         return;
                     default:
-                        log.error("Got unknown message type or type that doesn't apply to servers.");
-                        errorBuilder = Protos.Error.newBuilder()
-                                .setCode(Protos.Error.ErrorCode.SYNTAX_ERROR);
-                        closeReason = CloseReason.REMOTE_SENT_INVALID_MESSAGE;
-                        break;
+                        final String errorText = "Got unknown message type or type that doesn't apply to servers.";
+                        error(errorText, Protos.Error.ErrorCode.SYNTAX_ERROR, CloseReason.REMOTE_SENT_INVALID_MESSAGE);
                 }
             } catch (VerificationException e) {
-                log.error("Caught verification exception handling message from client {}", e);
-                errorBuilder = Protos.Error.newBuilder()
-                        .setCode(Protos.Error.ErrorCode.BAD_TRANSACTION)
-                        .setExplanation(e.getMessage());
-                closeReason = CloseReason.REMOTE_SENT_INVALID_MESSAGE;
+                log.error("Caught verification exception handling message from client", e);
+                error(e.getMessage(), Protos.Error.ErrorCode.BAD_TRANSACTION, CloseReason.REMOTE_SENT_INVALID_MESSAGE);
             } catch (ValueOutOfRangeException e) {
-                log.error("Caught value out of range exception handling message from client {}", e);
-                errorBuilder = Protos.Error.newBuilder()
-                        .setCode(Protos.Error.ErrorCode.BAD_TRANSACTION)
-                        .setExplanation(e.getMessage());
-                closeReason = CloseReason.REMOTE_SENT_INVALID_MESSAGE;
+                log.error("Caught value out of range exception handling message from client", e);
+                error(e.getMessage(), Protos.Error.ErrorCode.BAD_TRANSACTION, CloseReason.REMOTE_SENT_INVALID_MESSAGE);
+            } catch (InsufficientMoneyException e) {
+                log.error("Caught insufficient money exception handling message from client", e);
+                error(e.getMessage(), Protos.Error.ErrorCode.BAD_TRANSACTION, CloseReason.REMOTE_SENT_INVALID_MESSAGE);
             } catch (IllegalStateException e) {
-                log.error("Caught illegal state exception handling message from client {}", e);
-                errorBuilder = Protos.Error.newBuilder()
-                        .setCode(Protos.Error.ErrorCode.SYNTAX_ERROR);
-                closeReason = CloseReason.REMOTE_SENT_INVALID_MESSAGE;
+                log.error("Caught illegal state exception handling message from client", e);
+                error(e.getMessage(), Protos.Error.ErrorCode.SYNTAX_ERROR, CloseReason.REMOTE_SENT_INVALID_MESSAGE);
             }
-            conn.sendToClient(Protos.TwoWayChannelMessage.newBuilder()
-                    .setError(errorBuilder)
-                    .setType(Protos.TwoWayChannelMessage.MessageType.ERROR)
-                    .build());
-            conn.destroyConnection(closeReason);
         } finally {
             lock.unlock();
         }
+    }
+
+    private void error(String message, Protos.Error.ErrorCode errorCode, CloseReason closeReason) {
+        log.error(message);
+        Protos.Error.Builder errorBuilder;
+        errorBuilder = Protos.Error.newBuilder()
+                .setCode(errorCode)
+                .setExplanation(message);
+        conn.sendToClient(Protos.TwoWayChannelMessage.newBuilder()
+                .setError(errorBuilder)
+                .setType(Protos.TwoWayChannelMessage.MessageType.ERROR)
+                .build());
+        conn.destroyConnection(closeReason);
+    }
+
+    @GuardedBy("lock")
+    private void receiveCloseMessage() throws InsufficientMoneyException {
+        log.info("Got CLOSE message, closing channel");
+        if (state != null) {
+            settlePayment(CloseReason.CLIENT_REQUESTED_CLOSE);
+        } else {
+            conn.destroyConnection(CloseReason.CLIENT_REQUESTED_CLOSE);
+        }
+    }
+
+    @GuardedBy("lock")
+    private void settlePayment(final CloseReason clientRequestedClose) throws InsufficientMoneyException {
+        // Setting channelSettling here prevents us from sending another CLOSE when state.close() calls
+        // close() on us here below via the stored channel state.
+        // TODO: Strongly separate the lifecycle of the payment channel from the TCP connection in these classes.
+        channelSettling = true;
+        Futures.addCallback(state.close(), new FutureCallback<Transaction>() {
+            @Override
+            public void onSuccess(Transaction result) {
+                // Send the successfully accepted transaction back to the client.
+                final Protos.TwoWayChannelMessage.Builder msg = Protos.TwoWayChannelMessage.newBuilder();
+                msg.setType(Protos.TwoWayChannelMessage.MessageType.CLOSE);
+                if (result != null) {
+                    // Result can be null on various error paths, like if we never actually opened
+                    // properly and so on.
+                    msg.getSettlementBuilder().setTx(ByteString.copyFrom(result.bitcoinSerialize()));
+                    log.info("Sending CLOSE back with broadcast settlement tx.");
+                } else {
+                    log.info("Sending CLOSE back without broadcast settlement tx.");
+                }
+                conn.sendToClient(msg.build());
+                conn.destroyConnection(clientRequestedClose);
+            }
+
+            @Override
+            public void onFailure(Throwable t) {
+                log.error("Failed to broadcast settlement tx", t);
+                conn.destroyConnection(clientRequestedClose);
+            }
+        });
     }
 
     /**
@@ -396,7 +491,7 @@ public class PaymentChannelServer {
     }
 
     /**
-     * <p>Closes the connection by generating a close message for the client and calls
+     * <p>Closes the connection by generating a settle message for the client and calls
      * {@link ServerConnection#destroyConnection(CloseReason)}. Note that this does not broadcast
      * the payment transaction and the client may still resume the same channel if they reconnect</p>
      *
@@ -406,10 +501,10 @@ public class PaymentChannelServer {
     public void close() {
         lock.lock();
         try {
-            if (connectionOpen && !connectionClosing) {
-                conn.sendToClient(Protos.TwoWayChannelMessage.newBuilder()
-                        .setType(Protos.TwoWayChannelMessage.MessageType.CLOSE)
-                        .build());
+            if (connectionOpen && !channelSettling) {
+                final Protos.TwoWayChannelMessage.Builder msg = Protos.TwoWayChannelMessage.newBuilder();
+                msg.setType(Protos.TwoWayChannelMessage.MessageType.CLOSE);
+                conn.sendToClient(msg.build());
                 conn.destroyConnection(CloseReason.SERVER_REQUESTED_CLOSE);
             }
         } finally {

@@ -18,6 +18,7 @@ package com.google.bitcoin.protocols.channels;
 
 import com.google.bitcoin.core.*;
 
+import javax.annotation.Nullable;
 import java.math.BigInteger;
 import java.util.Date;
 
@@ -25,7 +26,7 @@ import static com.google.common.base.Preconditions.checkArgument;
 
 /**
  * Represents the state of a channel once it has been opened in such a way that it can be stored and used to resume a
- * channel which was interrupted (eg on connection failure) or close the channel automatically as the channel expire
+ * channel which was interrupted (eg on connection failure) or settle the channel automatically as the channel expire
  * time approaches.
  */
 public class StoredServerChannel {
@@ -41,8 +42,8 @@ public class StoredServerChannel {
     private PaymentChannelServer connectedHandler = null;
     PaymentChannelServerState state = null;
 
-    StoredServerChannel(PaymentChannelServerState state, Transaction contract, TransactionOutput clientOutput,
-                        long refundTransactionUnlockTimeSecs, ECKey myKey, BigInteger bestValueToMe, byte[] bestValueSignature) {
+    StoredServerChannel(@Nullable PaymentChannelServerState state, Transaction contract, TransactionOutput clientOutput,
+                        long refundTransactionUnlockTimeSecs, ECKey myKey, BigInteger bestValueToMe, @Nullable byte[] bestValueSignature) {
         this.contract = contract;
         this.clientOutput = clientOutput;
         this.refundTransactionUnlockTimeSecs = refundTransactionUnlockTimeSecs;

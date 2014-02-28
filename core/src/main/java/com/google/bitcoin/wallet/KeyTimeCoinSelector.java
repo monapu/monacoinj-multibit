@@ -25,11 +25,14 @@ import org.slf4j.LoggerFactory;
 import java.math.BigInteger;
 import java.util.LinkedList;
 
+import static com.google.common.base.Preconditions.checkNotNull;
+
 /**
  * A coin selector that takes all coins assigned to keys created before the given timestamp.
  * Used as part of the implementation of {@link Wallet#setKeyRotationTime(java.util.Date)}.
  */
-public class KeyTimeCoinSelector implements Wallet.CoinSelector {
+
+public class KeyTimeCoinSelector implements CoinSelector {
     private static final Logger log = LoggerFactory.getLogger(KeyTimeCoinSelector.class);
 
     /** A number of inputs chosen to avoid hitting {@link com.google.bitcoin.core.Transaction.MAX_STANDARD_TX_SIZE} */
@@ -46,7 +49,7 @@ public class KeyTimeCoinSelector implements Wallet.CoinSelector {
     }
 
     @Override
-    public Wallet.CoinSelection select(BigInteger target, LinkedList<TransactionOutput> candidates) {
+    public CoinSelection select(BigInteger target, LinkedList<TransactionOutput> candidates) {
         try {
             LinkedList<TransactionOutput> gathered = Lists.newLinkedList();
             BigInteger valueGathered = BigInteger.ZERO;
@@ -65,6 +68,9 @@ public class KeyTimeCoinSelector implements Wallet.CoinSelector {
                     log.info("Skipping tx output {} because it's not of simple form.", output);
                     continue;
                 }
+
+                checkNotNull(controllingKey, "Coin selector given output as candidate for which we lack the key");
+
                 if (controllingKey.getCreationTimeSeconds() >= unixTimeSeconds) continue;
                 // It's older than the cutoff time so select.
                 valueGathered = valueGathered.add(output.getValue());
@@ -74,7 +80,8 @@ public class KeyTimeCoinSelector implements Wallet.CoinSelector {
                     break;
                 }
             }
-            return new Wallet.CoinSelection(valueGathered, gathered);
+
+            return new CoinSelection(valueGathered, gathered);
         } catch (ScriptException e) {
             throw new RuntimeException(e);  // We should never have problems understanding scripts in our wallet.
         }

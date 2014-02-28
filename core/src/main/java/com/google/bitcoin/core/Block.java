@@ -24,6 +24,7 @@ import com.google.common.collect.ImmutableList;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.annotation.Nullable;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
@@ -658,7 +659,7 @@ public class Block extends Message {
     private void checkTimestamp() throws VerificationException {
         maybeParseHeader();
         // Allow injection of a fake clock to allow unit testing.
-        long currentTime = Utils.now().getTime()/1000;
+        long currentTime = Utils.currentTimeMillis()/1000;
         if (time > currentTime + ALLOWED_TIME_DRIFT)
             throw new VerificationException("Block too far in future");
     }
@@ -975,7 +976,8 @@ public class Block extends Message {
     /**
      * Returns a solved block that builds on top of this one. This exists for unit tests.
      */
-	@VisibleForTesting
+
+    @VisibleForTesting
     public Block createNextBlock(Address to, long time) {
         return createNextBlock(to, null, time, EMPTY_BYTES, Utils.toNanoCoins(50, 0));
     }
@@ -984,7 +986,8 @@ public class Block extends Message {
      * Returns a solved block that builds on top of this one. This exists for unit tests.
      * In this variant you can specify a public key (pubkey) for use in generating coinbase blocks.
      */
-    Block createNextBlock(Address to, TransactionOutPoint prevOut, long time, byte[] pubKey, BigInteger coinbaseValue) {
+    Block createNextBlock(@Nullable Address to, @Nullable TransactionOutPoint prevOut, long time,
+                          byte[] pubKey, BigInteger coinbaseValue) {
         Block b = new Block(params);
         b.setDifficultyTarget(difficultyTarget);
         b.addCoinbaseTransaction(pubKey, coinbaseValue);
@@ -1025,67 +1028,52 @@ public class Block extends Message {
         return b;
     }
 
-    // Visible for testing.
-    public Block createNextBlock(Address to, TransactionOutPoint prevOut) {
-        return createNextBlock(to, prevOut, Utils.now().getTime() / 1000, EMPTY_BYTES, Utils.toNanoCoins(50, 0));
+    @VisibleForTesting
+    public Block createNextBlock(@Nullable Address to, TransactionOutPoint prevOut) {
+        return createNextBlock(to, prevOut, Utils.currentTimeMillis() / 1000, EMPTY_BYTES, Utils.toNanoCoins(50, 0));
     }
 
-    // Visible for testing.
-    public Block createNextBlock(Address to, BigInteger value) {
-        return createNextBlock(to, null, Utils.now().getTime() / 1000, EMPTY_BYTES, value);
+    @VisibleForTesting
+    public Block createNextBlock(@Nullable Address to, BigInteger value) {
+        return createNextBlock(to, null, Utils.currentTimeMillis() / 1000, EMPTY_BYTES, value);
     }
 
-    public Block createNextBlock(Address to) {
+    @VisibleForTesting
+    public Block createNextBlock(@Nullable Address to) {
         return createNextBlock(to, Utils.toNanoCoins(50, 0));
     }
 
-    // Visible for testing.
+    @VisibleForTesting
     public Block createNextBlockWithCoinbase(byte[] pubKey, BigInteger coinbaseValue) {
-        return createNextBlock(null, null, Utils.now().getTime() / 1000, pubKey, coinbaseValue);
+        return createNextBlock(null, null, Utils.currentTimeMillis() / 1000, pubKey, coinbaseValue);
     }
 
     /**
      * Create a block sending 50BTC as a coinbase transaction to the public key specified.
      * This method is intended for test use only.
      */
+    @VisibleForTesting
     Block createNextBlockWithCoinbase(byte[] pubKey) {
-        return createNextBlock(null, null, Utils.now().getTime() / 1000, pubKey, Utils.toNanoCoins(50, 0));
+        return createNextBlock(null, null, Utils.currentTimeMillis() / 1000, pubKey, Utils.toNanoCoins(50, 0));
     }
 
-    /**
-     * Used for unit test
-     *
-     * @return the headerParsed
-     */
+    @VisibleForTesting
     boolean isParsedHeader() {
         return headerParsed;
     }
 
-    /**
-     * Used for unit test
-     *
-     * @return the transactionsParsed
-     */
+    @VisibleForTesting
     boolean isParsedTransactions() {
         return transactionsParsed;
     }
 
-    /**
-     * Used for unit test
-     *
-     * @return the headerBytesValid
-     */
+    @VisibleForTesting
     boolean isHeaderBytesValid() {
         return headerBytesValid;
     }
 
-    /**
-     * Used for unit test
-     *
-     * @return the transactionBytesValid
-     */
+    @VisibleForTesting
     boolean isTransactionBytesValid() {
         return transactionBytesValid;
     }
-
 }

@@ -84,7 +84,7 @@ class RuleList {
 }
 
 public class FullBlockTestGenerator {
-    // Used by BitcoindComparisonTool and FullPrunedBlockChainTest to create test cases
+    // Used by BitcoindComparisonTool and AbstractFullPrunedBlockChainTest to create test cases
     private NetworkParameters params;
     private ECKey coinbaseOutKey;
     private byte[] coinbaseOutKeyPubKey;
@@ -964,7 +964,7 @@ public class FullBlockTestGenerator {
         
         // Block with timestamp > 2h in the future
         Block b48 = createNextBlock(b44, chainHeadHeight + 16, out15, null);
-        b48.setTime(Utils.now().getTime() / 1000 + 60*60*3);
+        b48.setTime(Utils.currentTimeMillis() / 1000 + 60*60*3);
         b48.solve();
         blocks.add(new BlockAndValidity(blockToHeightMap, b48, false, true, b44.getHash(), chainHeadHeight + 15, "b48"));
         
@@ -1124,6 +1124,7 @@ public class FullBlockTestGenerator {
             scriptBytes[0] = (byte) tmp;
             scriptBytes[1] = (byte) (tmp >> 8);
             tx.getInputs().get(0).setScriptBytes(scriptBytes);
+
             b61.unCache();
             final Transaction tx2 = b60.getTransactions().get(0);
             Preconditions.checkState(tx.equals(tx2));

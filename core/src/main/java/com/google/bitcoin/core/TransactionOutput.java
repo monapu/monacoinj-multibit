@@ -27,10 +27,11 @@ import java.io.IOException;
 import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.io.Serializable;
+import java.lang.ref.WeakReference;
 import java.math.BigInteger;
 
-import static com.google.common.base.Preconditions.checkArgument;
-import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.*;
+
 
 /**
  * A TransactionOutput message contains a scriptPubKey that controls who is able to spend its value. It is a sub-part
@@ -46,7 +47,7 @@ public class TransactionOutput extends ChildMessage implements Serializable, IsM
     private byte[] scriptBytes;
 
     // The script bytes are parsed and turned into a Script on demand.
-    private transient Script scriptPubKey;
+    private transient WeakReference<Script> scriptPubKey;
 
     // These fields are Java serialized but not Bitcoin serialized. They are used for tracking purposes in our wallet
     // only. If set to true, this output is counted towards our balance. If false and spentBy is null the tx output
@@ -62,7 +63,7 @@ public class TransactionOutput extends ChildMessage implements Serializable, IsM
     /**
      * Deserializes a transaction output message. This is usually part of a transaction message.
      */
-    public TransactionOutput(NetworkParameters params, Transaction parent, byte[] payload,
+    public TransactionOutput(NetworkParameters params, @Nullable Transaction parent, byte[] payload,
                              int offset) throws ProtocolException {
         super(params, payload, offset);
         parentTransaction = parent;
@@ -120,11 +121,17 @@ public class TransactionOutput extends ChildMessage implements Serializable, IsM
     }
 
     public Script getScriptPubKey() throws ScriptException {
-        if (scriptPubKey == null) {
+        // Quick hack to try and reduce memory consumption on Androids. SoftReference is the same as WeakReference
+        // on Dalvik (by design), so this arrangement just means that we can avoid the cost of re-parsing the script
+        // bytes if getScriptPubKey is called multiple times in quick succession in between garbage collections.
+        Script script = scriptPubKey == null ? null : scriptPubKey.get();
+        if (script == null) {
             maybeParse();
-            scriptPubKey = new Script(scriptBytes);
+            script = new Script(scriptBytes);
+            scriptPubKey = new WeakReference<Script>(script);
+            return script;
         }
-        return scriptPubKey;
+        return script;
     }
 
     protected void parseLite() throws ProtocolException {
@@ -250,6 +257,27 @@ public class TransactionOutput extends ChildMessage implements Serializable, IsM
     }
 
     /**
+     * Returns true if this output is to a key in the wallet or to an address/script we are watching.
+     */
+    public boolean isMineOrWatched(Wallet wallet) {
+        return isMine(wallet) || isWatched(wallet);
+    }
+
+    /**
+     * Returns true if this output is to a key, or an address we have the keys for, in the wallet.
+     */
+    public boolean isWatched(Wallet wallet) {
+        try {
+            Script script = getScriptPubKey();
+            return wallet.isWatchedScript(script);
+        } catch (ScriptException e) {
+            // Just means we didn't understand the output of this transaction: ignore it.
+            log.debug("Could not parse tx output script: {}", e.toString());
+            return false;
+        }
+    }
+
+    /**
      * Returns true if this output is to a key, or an address we have the keys for, in the wallet.
      */
     public boolean isMine(Wallet wallet) {
@@ -290,11 +318,10 @@ public class TransactionOutput extends ChildMessage implements Serializable, IsM
     }
 
     /**
-     * Returns the transaction that owns this output, or null if this is a free standing object.
+     * Returns the transaction that owns this output, or throws NullPointerException if unowned.
      */
-    @Nullable
     public Transaction getParentTransaction() {
-        return parentTransaction;
+        return checkNotNull(parentTransaction, "Free-standing TransactionOutput");
     }
 
     /**

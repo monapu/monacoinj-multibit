@@ -32,7 +32,6 @@ import org.slf4j.LoggerFactory;
 import javax.annotation.Nullable;
 import java.math.BigInteger;
 import java.util.Arrays;
-import java.util.Collections;
 
 import static com.google.common.base.Preconditions.*;
 
@@ -244,7 +243,7 @@ public class PaymentChannelServerState {
                 try {
                     // Manually add the multisigContract to the wallet, overriding the isRelevant checks so we can track
                     // it and check for double-spends later
-                    wallet.receivePending(multisigContract, Collections.EMPTY_LIST, true);
+                    wallet.receivePending(multisigContract, null, true);
                 } catch (VerificationException e) {
                     throw new RuntimeException(e); // Cannot happen, we already called multisigContract.verify()
                 }
@@ -282,8 +281,9 @@ public class PaymentChannelServerState {
      * @param refundSize How many satoshis of the original contract are refunded to the client (the rest are ours)
      * @param signatureBytes The new signature spending the multi-sig contract to a new payment transaction
      * @throws VerificationException If the signature does not verify or size is out of range (incl being rejected by the network as dust).
+     * @return true if there is more value left on the channel, false if it is now fully used up.
      */
-    public synchronized void incrementPayment(BigInteger refundSize, byte[] signatureBytes) throws VerificationException, ValueOutOfRangeException {
+    public synchronized boolean incrementPayment(BigInteger refundSize, byte[] signatureBytes) throws VerificationException, ValueOutOfRangeException, InsufficientMoneyException {
         checkState(state == State.READY);
         checkNotNull(refundSize);
         checkNotNull(signatureBytes);
@@ -297,13 +297,13 @@ public class PaymentChannelServerState {
         if (newValueToMe.compareTo(BigInteger.ZERO) < 0)
             throw new ValueOutOfRangeException("Attempt to refund more than the contract allows.");
         if (newValueToMe.compareTo(bestValueToMe) < 0)
-            return;
+            throw new ValueOutOfRangeException("Attempt to roll back payment on the channel.");
 
         // Get the wallet's copy of the multisigContract (ie with confidence information), if this is null, the wallet
         // was not connected to the peergroup when the contract was broadcast (which may cause issues down the road, and
         // disables our double-spend check next)
         Transaction walletContract = wallet.getTransaction(multisigContract.getHash());
-        checkState(walletContract != null, "Wallet did not contain multisig contract {} after state was marked READY", multisigContract.getHash());
+        checkNotNull(walletContract, "Wallet did not contain multisig contract {} after state was marked READY", multisigContract.getHash());
 
         // Note that we check for DEAD state here, but this test is essentially useless in production because we will
         // miss most double-spends due to bloom filtering right now anyway. This will eventually fixed by network-wide
@@ -335,6 +335,7 @@ public class PaymentChannelServerState {
         bestValueToMe = newValueToMe;
         bestValueSignature = signatureBytes;
         updateChannelInWallet();
+        return !fullyUsedUp;
     }
 
     // Signs the first input of the transaction which must spend the multisig contract.
@@ -345,7 +346,7 @@ public class PaymentChannelServerState {
         tx.getInput(0).setScriptSig(scriptSig);
     }
 
-    final SettableFuture<PaymentChannelServerState> closedFuture = SettableFuture.create();
+    final SettableFuture<Transaction> closedFuture = SettableFuture.create();
     /**
      * <p>Closes this channel and broadcasts the highest value payment transaction on the network.</p>
      *
@@ -356,11 +357,12 @@ public class PaymentChannelServerState {
      * simply set the state to {@link State#CLOSED} and let the client handle getting its refund transaction confirmed.
      * </p>
      *
-     * @return a future which completes when the provided multisig contract successfully broadcasts, or throws if the broadcast fails for some reason
-     *          Note that if the network simply rejects the transaction, this future will never complete, a timeout should be used.
-     * @throws ValueOutOfRangeException If the payment transaction would have cost more in fees to spend than it was worth
+     * @return a future which completes when the provided multisig contract successfully broadcasts, or throws if the
+     *         broadcast fails for some reason. Note that if the network simply rejects the transaction, this future
+     *         will never complete, a timeout should be used.
+     * @throws InsufficientMoneyException If the payment tx would have cost more in fees to spend than it is worth.
      */
-    public synchronized ListenableFuture<PaymentChannelServerState> close() throws ValueOutOfRangeException {
+    public synchronized ListenableFuture<Transaction> close() throws InsufficientMoneyException {
         if (storedServerChannel != null) {
             StoredServerChannel temp = storedServerChannel;
             storedServerChannel = null;
@@ -372,36 +374,41 @@ public class PaymentChannelServerState {
         }
 
         if (state.ordinal() < State.READY.ordinal()) {
+            log.error("Attempt to settle channel in state " + state);
             state = State.CLOSED;
-            closedFuture.set(this);
+            closedFuture.set(null);
             return closedFuture;
         }
-        if (state != State.READY) // We are already closing/closed/in an error state
-            return closedFuture;
-
-        if (bestValueToMe.equals(BigInteger.ZERO)) {
-            state = State.CLOSED;
-            closedFuture.set(this);
+        if (state != State.READY) {
+            // TODO: What is this codepath for?
+            log.warn("Failed attempt to settle a channel in state " + state);
             return closedFuture;
         }
         Transaction tx = null;
         try {
             Wallet.SendRequest req = makeUnsignedChannelContract(bestValueToMe);
             tx = req.tx;
-            // Provide a BS signature so that completeTx wont freak out about unsigned inputs.
+            // Provide a throwaway signature so that completeTx won't complain out about unsigned inputs it doesn't
+            // know how to sign. Note that this signature does actually have to be valid, so we can't use a dummy
+            // signature to save time, because otherwise completeTx will try to re-sign it to make it valid and then
+            // die. We could probably add features to the SendRequest API to make this a bit more efficient.
             signMultisigInput(tx, Transaction.SigHash.NONE, true);
-            if (!wallet.completeTx(req)) // Let wallet handle adding additional inputs/fee as necessary.
-                throw new ValueOutOfRangeException("Unable to complete transaction - unable to pay required fee");
+            // Let wallet handle adding additional inputs/fee as necessary.
+            wallet.completeTx(req);
             feePaidForPayment = req.fee;
-            if (feePaidForPayment.compareTo(bestValueToMe) >= 0)
-                throw new ValueOutOfRangeException("Had to pay more in fees than the channel was worth");
+            log.info("Calculated fee is {}", feePaidForPayment);
+            if (feePaidForPayment.compareTo(bestValueToMe) >= 0) {
+                final String msg = String.format("Had to pay more in fees (%s) than the channel was worth (%s)",
+                        feePaidForPayment, bestValueToMe);
+                throw new InsufficientMoneyException(feePaidForPayment.subtract(bestValueToMe), msg);
+            }
             // Now really sign the multisig input.
             signMultisigInput(tx, Transaction.SigHash.ALL, false);
             // Some checks that shouldn't be necessary but it can't hurt to check.
             tx.verify();  // Sanity check syntax.
             for (TransactionInput input : tx.getInputs())
                 input.verify();  // Run scripts and ensure it is valid.
-        } catch (ValueOutOfRangeException e) {
+        } catch (InsufficientMoneyException e) {
             throw e;  // Don't fall through.
         } catch (Exception e) {
             log.error("Could not verify self-built tx\nMULTISIG {}\nCLOSE {}", multisigContract, tx != null ? tx : "");
@@ -415,11 +422,11 @@ public class PaymentChannelServerState {
             @Override public void onSuccess(Transaction transaction) {
                 log.info("TX {} propagated, channel successfully closed.", transaction.getHash());
                 state = State.CLOSED;
-                closedFuture.set(PaymentChannelServerState.this);
+                closedFuture.set(transaction);
             }
 
             @Override public void onFailure(Throwable throwable) {
-                log.error("Failed to close channel, could not broadcast: {}", throwable.toString());
+                log.error("Failed to settle channel, could not broadcast: {}", throwable.toString());
                 throwable.printStackTrace();
                 state = State.ERROR;
                 closedFuture.setException(throwable);
@@ -429,14 +436,14 @@ public class PaymentChannelServerState {
     }
 
     /**
-     * Gets the highest payment to ourselves (which we will receive on close(), not including fees)
+     * Gets the highest payment to ourselves (which we will receive on settle(), not including fees)
      */
     public synchronized BigInteger getBestValueToMe() {
         return bestValueToMe;
     }
 
     /**
-     * Gets the fee paid in the final payment transaction (only available if close() did not throw an exception)
+     * Gets the fee paid in the final payment transaction (only available if settle() did not throw an exception)
      */
     public synchronized BigInteger getFeePaid() {
         checkState(state == State.CLOSED || state == State.CLOSING);

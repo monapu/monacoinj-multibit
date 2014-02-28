@@ -77,6 +77,14 @@ message Key {
   optional int64 creation_timestamp = 5;
 }
 
+message Script {
+    required bytes program = 1;
+
+    // Timestamp stored as millis since epoch. Useful for skipping block bodies before this point
+    // when watching for scripts on the blockchain.
+    required int64 creation_timestamp = 2;
+}
+
 message TransactionInput {
   // Hash of the transaction this input is using.
   required bytes transaction_out_point_hash = 1;
@@ -253,9 +261,11 @@ message Wallet {
   optional bytes last_seen_block_hash = 2;
   // The height in the chain of the last seen block.
   optional uint32 last_seen_block_height = 12;
+  optional int64 last_seen_block_time_secs = 14;
 
   repeated Key key = 3;
   repeated Transaction transaction = 4;
+  repeated Script watched_script = 15;
 
   optional EncryptionType encryption_type = 5 [default=UNENCRYPTED];
   optional ScryptParameters encryption_parameters = 6;
@@ -278,4 +288,6 @@ message Wallet {
   // wanted. Money sent to them will be re-spent automatically to the first key that was created after this time. It
   // can be used to recover a compromised wallet, or just as part of preventative defence-in-depth measures.
   optional uint64 key_rotation_time = 13;
+
+  // Next tag: 16
 }

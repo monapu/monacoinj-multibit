@@ -27,10 +27,9 @@ package paymentchannels;
 option java_package = "org.bitcoin.paymentchannel";
 option java_outer_classname = "Protos";
 
-
-// The connection should be a standard TLS connection and all messages sent over this socket are
-// serialized TwoWayChannelMessages prefixed with 2-byte size in big-endian (smaller than or
-// equal to 32767 bytes in size)
+// This message is designed to be either sent raw over the network (e.g. length prefixed) or embedded inside another
+// protocol that is being extended to support micropayments. In this file "primary" typically can be read as "client"
+// and "secondary" as "server".
 message TwoWayChannelMessage {
     enum MessageType {
         CLIENT_VERSION = 1;
@@ -48,15 +47,26 @@ message TwoWayChannelMessage {
         // message.
         CHANNEL_OPEN = 7;
         UPDATE_PAYMENT = 8;
-        // Note that there are no optional fields set for CLOSE, it is sent by either party to
-        // indicate that the channel is now closed and no further updates can happen. After this,
-        // the secondary takes the most recent signature it received in an UPDATE_PAYMENT and
-        // uses it to create a valid transaction, which it then broadcasts on the network.
+        // Sent by the server to the client after an UPDATE_PAYMENT message is successfully processed.
+        PAYMENT_ACK = 11;
+        // Either side can send this message. If the client sends it to the server, then the server
+        // takes the most recent signature it received in an UPDATE_PAYMENT and uses it to create a
+        // valid transaction, which it then broadcasts on the network.
+        //
+        // Once broadcast is complete, it sends back another CLOSE message with the settlement field set, containing
+        // the final state of the contract.
+        //
+        // The server is allowed to initiate settlement whenever it wants, in which case the client will
+        // asynchronously receive a CLOSE message with the settlement field set. The server is also allowed
+        // to send a CLOSE to mark the end of a connection without any settlement taking place, in which
+        // case this is just an equivalent to a TCP FIN packet. An explicit end-of-protocol markers can be
+        // useful when this protocol is embedded inside another.
         CLOSE = 9;
 
         // Used to indicate an error condition.
         // Both parties should make an effort to send either an ERROR or a CLOSE immediately
-        // before closing the socket (unless they just received an ERROR or a CLOSE)
+        // before closing the socket (unless they just received an ERROR or a CLOSE). This is important
+        // because the protocol may not run over TCP.
         ERROR = 10;
     };
 
@@ -73,6 +83,7 @@ message TwoWayChannelMessage {
     optional ReturnRefund return_refund = 6;
     optional ProvideContract provide_contract = 7;
     optional UpdatePayment update_payment = 8;
+    optional Settlement settlement = 9;
 
     optional Error error = 10;
 }
@@ -102,7 +113,7 @@ message ServerVersion {
     optional int32 minor = 2 [default = 0];
 }
 
-// Sent from secondary to primary once version nego is done.
+// Sent from server to client once version nego is done.
 message Initiate {
     // This must be a raw pubkey in regular ECDSA form. Both compressed and non-compressed forms
     // are accepted. It is used only in the creation of the multisig contract, as outputs are
@@ -118,11 +129,19 @@ message Initiate {
     // Rough UNIX time for when the channel expires. This is determined by the block header
     // timestamps which can be very inaccurate when miners use the obsolete RollNTime hack.
     // Channels could also be specified in terms of block heights but then how do you know the
-    // current chain height if you don't have internet access? Trust secondary? Probably opens up
-    // attack vectors. We can assume primary has an independent clock, however. If primary
+    // current chain height if you don't have internet access? Trust the server? Probably opens up
+    // attack vectors. We can assume the client has an independent clock, however. If the client
     // considers this value too far off (eg more than a day), it may send an ERROR and close the
     // channel.
     required uint64 expire_time_secs = 3;
+
+    // The amount of money the server requires for the initial payment. The act of opening a channel
+    // always transfers some quantity of money to the server: it's impossible to have a channel with
+    // zero value transferred. This rule ensures that you can't get a channel that can't be settled
+    // due to having paid under the dust limit. Because the dust limit will float in future, the
+    // server tells the client what it thinks it is, and the client is supposed to sanity check this
+    // value.
+    required uint64 min_payment = 4;
 }
 
 // Sent from primary to secondary after Initiate to begin the refund transaction signing.
@@ -160,6 +179,12 @@ message ProvideContract {
     //   primary's and the second being the secondary's (ie the script must be exactly "OP_2
     //   ProvideRefund.multisig_key Initiate.multisig_key OP_2 OP_CHECKMULTISIG")
     required bytes tx = 1;
+
+    // To open the channel, an initial payment of the server-specified dust limit value must be
+    // provided. This ensures that the channel is never in an un-settleable state due to either
+    // no payment tx having been provided at all, or a payment that is smaller than the dust
+    // limit being provided.
+    required UpdatePayment initial_payment = 2;
 }
 
 // This message can only be used by the primary after it has received a CHANNEL_OPEN message. It
@@ -186,6 +211,11 @@ message UpdatePayment {
     required bytes signature = 2;
 }
 
+message Settlement {
+    // A copy of the fully signed final contract that settles the channel. The client can verify
+    // the transaction is correct and then commit it to their wallet.
+    required bytes tx = 3;
+}
 
 // An Error can be sent by either party at any time
 // Both parties should make an effort to send either an ERROR or a CLOSE immediately before
@@ -203,9 +233,13 @@ message Error {
                                      // for the primary
         CHANNEL_VALUE_TOO_LARGE = 6; // The minimum channel value specified by the secondary was
                                      // too large for the primary
+        MIN_PAYMENT_TOO_LARGE = 7;   // The min "dust limit" specified by the server was too large for the client.
 
-        OTHER = 7;
+        OTHER = 8;
     };
     optional ErrorCode code = 1 [default=OTHER];
     optional string explanation = 2;   // NOT SAFE FOR HTML WITHOUT ESCAPING
+
+    // Can be set by the client when erroring to the server if a value was out of range. Can help with debugging.
+    optional uint64 expected_value = 3;
 }

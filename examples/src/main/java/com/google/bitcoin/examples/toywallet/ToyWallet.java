@@ -17,7 +17,6 @@
 package com.google.bitcoin.examples.toywallet;
 
 import com.google.bitcoin.core.*;
-import com.google.bitcoin.discovery.DnsDiscovery;
 import com.google.bitcoin.params.MainNetParams;
 import com.google.bitcoin.params.TestNet3Params;
 import com.google.bitcoin.store.H2FullPrunedBlockStore;
@@ -39,7 +38,6 @@ import java.math.BigInteger;
 import java.util.Date;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 /**
  * A GUI demo that lets you watch received transactions as they accumulate confidence.
