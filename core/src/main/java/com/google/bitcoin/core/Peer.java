@@ -16,11 +16,11 @@
 
 package com.google.bitcoin.core;
 
-import com.google.bitcoin.core.WalletTransaction.Pool;
 import com.google.bitcoin.store.BlockStore;
 import com.google.bitcoin.store.BlockStoreException;
 import com.google.bitcoin.utils.ListenerRegistration;
 import com.google.bitcoin.utils.Threading;
+import com.google.bitcoin.wallet.WalletTransaction;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
@@ -600,8 +600,8 @@ public class Peer extends PeerSocketHandler {
                     } else {
                         // The transaction might be a pending transaction we already have.
                         Transaction poolTx = memoryPool.get(tx.getHash());
-                        EnumSet<Pool> containingPools = wallet.getContainingPools(poolTx);
-                        if (containingPools.contains(Pool.PENDING)) {
+                        EnumSet<WalletTransaction.Pool> containingPools = wallet.getContainingPools(poolTx);
+                        if (containingPools.contains(WalletTransaction.Pool.PENDING)) {
                             if (poolTx != null && poolTx.getConfidence() != null) {
                                 poolTx.getConfidence().markBroadcastBy(getAddress());
                             }

@@ -1839,8 +1839,8 @@ public class Wallet implements Serializable, BlockChainListener, PeerFilterProvi
         return result;
     }
 
-    public boolean completeTx(SendRequest req) {
-        return completeTx(req, true);
+    public void completeTx(SendRequest req) throws InsufficientMoneyException {
+        completeTx(req, true);
     }
 
     /**
@@ -1883,7 +1883,7 @@ public class Wallet implements Serializable, BlockChainListener, PeerFilterProvi
      * @throws IllegalArgumentException if you try and complete the same SendRequest twice, or if the given send request
      *         cannot be completed without violating the protocol rules.
      */
-    public void completeTx(SendRequest req) throws InsufficientMoneyException {
+    public void completeTx(SendRequest req, boolean sign) throws InsufficientMoneyException {
         lock.lock();
         try {
             checkArgument(!req.completed, "Given SendRequest has already been completed.");
