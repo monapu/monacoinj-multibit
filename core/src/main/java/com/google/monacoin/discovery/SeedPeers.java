@@ -86,9 +86,12 @@ public class SeedPeers implements PeerDiscovery {
 
     public static int[] seedAddrs =
             {
+                0xF713F285, // 2ch pool
+                0x5D33F285, // monapool 1
+                0xE132F285, // monapool 2
+                0xD7C4D431, // kenmopool
+                0x3DF85EDB, // gikopool
                 0xB4ED6257,
-                0xF713F285,
-                0x5D33F285,
                 //TODO more nodes
             };
     
