@@ -531,7 +531,7 @@ public class PeerGroup extends AbstractIdleService implements TransactionBroadca
             InetSocketAddress[] addresses;
             addresses = peerDiscovery.getPeers(5, TimeUnit.SECONDS);
             for (InetSocketAddress address : addresses) addressSet.add(new PeerAddress(address));
-            if (addressSet.size() > 0) break;
+            if (addressSet.size() > 2) break;
         }
         lock.lock();
         try {
