@@ -239,6 +239,13 @@ public class Wallet implements Serializable, BlockChainListener, PeerFilterProvi
     public Wallet(NetworkParameters params, KeyCrypter keyCrypter) {
         this(params);
         this.keyCrypter = checkNotNull(keyCrypter);
+
+        // The wallet is encrypted, add a wallet protect extension.
+        MultiBitWalletExtension multibitWalletExtension = new MultiBitWalletExtension();
+        extensions.put(multibitWalletExtension.getWalletExtensionID(), multibitWalletExtension);
+
+        // The wallet version indicates the wallet is encrypted.
+        setVersion(MultiBitWalletVersion.PROTOBUF_ENCRYPTED);
     }
 
     private void createTransientState() {
@@ -348,7 +355,7 @@ public class Wallet implements Serializable, BlockChainListener, PeerFilterProvi
         FileOutputStream stream = null;
         lock.lock();
         try {
-            stream = new FileOutputStream(destFile);
+            stream = new FileOutputStream(temp);
             saveToFileStream(stream);
             // Attempt to force the bits to hit the disk. In reality the OS or hard disk itself may still decide
             // to not write through to physical media for at least a few seconds, but this is the best we can do.
@@ -630,13 +637,6 @@ public class Wallet implements Serializable, BlockChainListener, PeerFilterProvi
                 return;
             if (isTransactionRisky(tx, dependencies) && !acceptRiskyTransactions)
                 return;
-            BigInteger valueSentToMe = tx.getValueSentToMe(this);
-            BigInteger valueSentFromMe = tx.getValueSentFromMe(this);
-//            if (log.isInfoEnabled()) {
-//                log.info(String.format("Received a pending transaction %s that spends %s BTC from our own wallet (%s)," +
-//                        " and sends us %s BTC", tx.getHashAsString(), Utils.bitcoinValueToFriendlyString(valueSentFromMe),
-//                        getDescription(), Utils.bitcoinValueToFriendlyString(valueSentToMe)));
-//            }
             if (tx.getConfidence().getSource().equals(TransactionConfidence.Source.UNKNOWN)) {
                 log.warn("Wallet received transaction with an unknown source. Consider tagging it!");
             }
