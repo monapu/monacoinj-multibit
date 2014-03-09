@@ -70,6 +70,7 @@ public abstract class NetworkParameters implements Serializable {
     protected int addressHeader;
     protected int dumpedPrivateKeyHeader;
     protected int interval;
+    protected int switchKGWBlock;
     protected int targetTimespan;
     protected byte[] alertSigningKey;
 
@@ -122,6 +123,8 @@ public abstract class NetworkParameters implements Serializable {
     public static final int TARGET_SPACING = (int)(1.5 * 60);  // 1.5 minutes per block.
     public static final int INTERVAL = TARGET_TIMESPAN / TARGET_SPACING;
     
+    public static final int SWITCH_KGW_BLOCK = 100000;
+
     /**
      * Blocks with a timestamp after this should enforce BIP 16, aka "Pay to script hash". This BIP changed the
      * network rules in a soft-forking manner, that is, blocks that don't follow the rules are accepted but not
@@ -292,6 +295,10 @@ public abstract class NetworkParameters implements Serializable {
     /** How many blocks pass between difficulty adjustment periods. Bitcoin standardises this to be 2015. */
     public int getInterval() {
         return interval;
+    }
+
+    public int getSwitchKGWBlock() {
+        return switchKGWBlock;
     }
 
     /** What the easiest allowable proof of work should be. */

@@ -773,13 +773,18 @@ public abstract class AbstractBlockChain {
 
     // February 16th 2012
     private static Date testnetDiffDate = new Date(1329264000000L);
-
+                        
     /**
      * Throws an exception if the blocks difficulty is not correct.
      */
     private void checkDifficultyTransitions(StoredBlock storedPrev, Block nextBlock) throws BlockStoreException, VerificationException {
         checkState(lock.isHeldByCurrentThread());
         Block prev = storedPrev.getHeader();
+        
+        if((storedPrev.getHeight() + 1) >= params.getSwitchKGWBlock() ) {
+            checkDifficultyTransitionsKGW( storedPrev , nextBlock);
+            return;
+        }
         
         // Is this supposed to be a difficulty transition point?
         if ((storedPrev.getHeight() + 1) % params.getInterval() != 0) {
@@ -847,16 +852,105 @@ public abstract class AbstractBlockChain {
             newDifficulty = params.getProofOfWorkLimit();
         }
 
-        int accuracyBytes = (int) (nextBlock.getDifficultyTarget() >>> 24) - 3;
-        BigInteger receivedDifficulty = nextBlock.getDifficultyTargetAsInteger();
-
-        // The calculated difficulty is to a higher precision than received, so reduce here.
-        BigInteger mask = BigInteger.valueOf(0xFFFFFFL).shiftLeft(accuracyBytes * 8);
-        newDifficulty = newDifficulty.and(mask);
-
-        if (newDifficulty.compareTo(receivedDifficulty) != 0)
+        if (!verifyTarget( nextBlock , newDifficulty)){
             throw new VerificationException("Network provided difficulty bits do not match what was calculated: " +
-                    receivedDifficulty.toString(16) + " vs " + newDifficulty.toString(16));
+                                            nextBlock.getDifficultyTargetAsInteger().toString(16) + 
+                                            " vs " + newDifficulty.toString(16));
+        }
+    }
+    
+    private void checkDifficultyTransitionsKGW(StoredBlock blockLastSolved, Block nextBlock) throws BlockStoreException, VerificationException {
+
+        long timeDaySeconds = 60 * 60 * 24;
+        long pastSecondsMin = (long)(timeDaySeconds * 0.25);
+        long pastSecondsMax = timeDaySeconds * 7;
+        long pastBlocksMin  = pastSecondsMin / NetworkParameters.TARGET_SPACING;
+        long pastBlocksMax  = pastSecondsMax / NetworkParameters.TARGET_SPACING;
+
+        long pastRateActualSeconds = 0;
+        long pastRateTargetSeconds = 0;
+
+        BigInteger newTarget = null;
+
+        double eventHorizonDeviation;
+        double eventHorizonDeviationFast;
+        double eventHorizonDeviationSlow;
+
+        // Block blockLastSolvedHeader = blockLastSolved.getHeader();
+        
+        StoredBlock blockReading = blockLastSolved;
+        long pastBlocksMass = 0;
+        double pastRateAdjustmentRatio = 1.0D ;
+        BigInteger pastTargetAverage = null;
+        BigInteger pastTargetAveragePrev = null;
+
+        if( blockLastSolved == null
+            || blockLastSolved.getHeight() == 0
+            || blockLastSolved.getHeight() < pastBlocksMin ){
+            newTarget = params.getProofOfWorkLimit();
+        } else {
+            
+            for( long i = 1; ((blockReading != null) && (blockReading.getHeight() > 0)); i++){
+                if( pastBlocksMax > 0 && i > pastBlocksMax ) 
+                    break;
+                pastBlocksMass++;
+                BigInteger thisTarget = blockReading.getHeader().getDifficultyTargetAsInteger();
+                if( i == 1) {
+                    pastTargetAverage = thisTarget;
+                } else {
+                    pastTargetAverage = 
+                        pastTargetAveragePrev.
+                        add( thisTarget.subtract(pastTargetAveragePrev).
+                             divide( BigInteger.valueOf(i)) );
+                }
+                pastTargetAveragePrev = pastTargetAverage;
+                // c++ のGetBlockTimeは unix時間
+                pastRateActualSeconds =
+                    blockLastSolved.getHeader().getTimeSeconds() - 
+                    blockReading.getHeader().getTimeSeconds();
+                pastRateTargetSeconds =
+                     NetworkParameters.TARGET_SPACING * pastBlocksMass;
+                pastRateAdjustmentRatio = 1D;
+                if( pastRateActualSeconds < 0) pastRateActualSeconds = 0;
+                if( pastRateActualSeconds != 0 && pastRateTargetSeconds != 0){
+                    pastRateAdjustmentRatio = 
+                        (new Long(pastRateTargetSeconds)).doubleValue() / 
+                        (new Long(pastRateActualSeconds)).doubleValue();
+                }
+                
+                eventHorizonDeviation = 
+                    1 + (0.7084 * Math.pow(pastBlocksMass/144D, -1.228)); // KGW formula
+                eventHorizonDeviationFast = eventHorizonDeviation;
+                eventHorizonDeviationSlow = 1 / eventHorizonDeviation;
+                
+                if( pastBlocksMass >= pastBlocksMin ){
+                    if( (pastRateAdjustmentRatio <= eventHorizonDeviationSlow) ||
+                        (pastRateAdjustmentRatio >= eventHorizonDeviationFast)) {
+                        break;
+                    }
+                }
+                StoredBlock prevBlock = blockReading.getPrev(blockStore);
+                if( prevBlock == null)
+                    break;
+                blockReading = prevBlock;
+            } // for
+            
+            newTarget = pastTargetAverage;
+            if( pastRateActualSeconds != 0 && pastRateTargetSeconds != 0){
+                newTarget = 
+                    newTarget.multiply( BigInteger.valueOf(pastRateActualSeconds) ).
+                    divide( BigInteger.valueOf(pastRateTargetSeconds) );
+                
+            }
+            if( newTarget.compareTo(params.getProofOfWorkLimit()) == 1 )
+                newTarget = params.getProofOfWorkLimit();
+        } // if
+
+        if( !verifyTarget( nextBlock , newTarget)){
+            throw new VerificationException("Network provided difficulty bits do not match what was calculated(KGW): " +
+                                            nextBlock.getDifficultyTargetAsInteger().toString(16) + 
+                                            " vs " + newTarget.toString(16));
+        }
     }
 
     private void checkTestnetDifficulty(StoredBlock storedPrev, Block prev, Block next) throws VerificationException, BlockStoreException {
@@ -883,6 +977,19 @@ public abstract class AbstractBlockChain {
                     Long.toHexString(cursor.getHeader().getDifficultyTarget()) + " vs " +
                     Long.toHexString(next.getDifficultyTarget()));
         }
+    }
+
+    private boolean verifyTarget( Block block , BigInteger newDifficulty )
+        throws VerificationException
+    {
+        int accuracyBytes = (int) (block.getDifficultyTarget() >>> 24) - 3;
+        BigInteger receivedDifficulty = block.getDifficultyTargetAsInteger();
+        
+        // The calculated difficulty is to a higher precision than received, so reduce here.
+        BigInteger mask = BigInteger.valueOf(0xFFFFFFL).shiftLeft(accuracyBytes * 8);
+        BigInteger newDifficulty2 = newDifficulty.and(mask);
+        
+        return (newDifficulty2.compareTo(receivedDifficulty) == 0 );
     }
 
     /**
