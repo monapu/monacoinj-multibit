@@ -123,7 +123,7 @@ public abstract class NetworkParameters implements Serializable {
     public static final int TARGET_SPACING = (int)(1.5 * 60);  // 1.5 minutes per block.
     public static final int INTERVAL = TARGET_TIMESPAN / TARGET_SPACING;
     
-    public static final int SWITCH_KGW_BLOCK = 100000;
+    public static final int SWITCH_KGW_BLOCK = 80000;
 
     /**
      * Blocks with a timestamp after this should enforce BIP 16, aka "Pay to script hash". This BIP changed the
