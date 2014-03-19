@@ -89,9 +89,10 @@ public class SeedPeers implements PeerDiscovery {
                 0xF713F285, // 2ch pool
                 0x5D33F285, // monapool 1
                 0xE132F285, // monapool 2
-                0xD7C4D431, // kenmopool
+                // 0xD7C4D431, // kenmopool
                 0x3DF85EDB, // gikopool
                 0xB4ED6257,
+                0x4FA7D431,
                 //TODO more nodes
             };
     
