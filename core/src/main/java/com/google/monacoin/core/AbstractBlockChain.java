@@ -862,7 +862,7 @@ public abstract class AbstractBlockChain {
     private void checkDifficultyTransitionsKGW(StoredBlock blockLastSolved, Block nextBlock) throws BlockStoreException, VerificationException {
 
         long timeDaySeconds = 60 * 60 * 24;
-        long pastSecondsMin = (long)(timeDaySeconds * 0.25);
+        long pastSecondsMin = timeDaySeconds / 4 ;
         long pastSecondsMax = timeDaySeconds * 7;
         long pastBlocksMin  = pastSecondsMin / NetworkParameters.TARGET_SPACING;
         long pastBlocksMax  = pastSecondsMax / NetworkParameters.TARGET_SPACING;
@@ -914,12 +914,12 @@ public abstract class AbstractBlockChain {
                 if( pastRateActualSeconds < 0) pastRateActualSeconds = 0;
                 if( pastRateActualSeconds != 0 && pastRateTargetSeconds != 0){
                     pastRateAdjustmentRatio = 
-                        (new Long(pastRateTargetSeconds)).doubleValue() / 
-                        (new Long(pastRateActualSeconds)).doubleValue();
+                        Double.valueOf(pastRateTargetSeconds) / 
+                        Double.valueOf(pastRateActualSeconds) ;
                 }
                 
                 eventHorizonDeviation = 
-                    1 + (0.7084 * Math.pow(pastBlocksMass/144D, -1.228)); // KGW formula
+                    1 + (0.7084 * Math.pow(Double.valueOf(pastBlocksMass)/144D, -1.228)); // KGW formula
                 eventHorizonDeviationFast = eventHorizonDeviation;
                 eventHorizonDeviationSlow = 1 / eventHorizonDeviation;
                 
@@ -945,12 +945,15 @@ public abstract class AbstractBlockChain {
             if( newTarget.compareTo(params.getProofOfWorkLimit()) == 1 )
                 newTarget = params.getProofOfWorkLimit();
         } // if
+        
+        // log.info("pastBlocksMass:{}" , pastBlocksMass);
 
         if( !verifyTarget( nextBlock , newTarget)){
             throw new VerificationException("Network provided difficulty bits do not match what was calculated(KGW): " +
                                             nextBlock.getDifficultyTargetAsInteger().toString(16) + 
                                             " vs " + newTarget.toString(16));
         }
+        
     }
 
     private void checkTestnetDifficulty(StoredBlock storedPrev, Block prev, Block next) throws VerificationException, BlockStoreException {

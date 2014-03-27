@@ -46,7 +46,7 @@ public class SPVBlockStore implements BlockStore {
     private static final Logger log = LoggerFactory.getLogger(SPVBlockStore.class);
 
     /** The default number of headers that will be stored in the ring buffer. */
-    public static final int DEFAULT_NUM_HEADERS = 5000;
+    public static final int DEFAULT_NUM_HEADERS = 60 * 60 * 24 * 7 / NetworkParameters.TARGET_SPACING + 1; // KGW past block max
     public static final String HEADER_MAGIC = "SPVB";
 
     protected volatile MappedByteBuffer buffer;
