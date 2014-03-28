@@ -28,7 +28,7 @@ public class MemoryBlockStore implements BlockStore {
     private LinkedHashMap<Sha256Hash, StoredBlock> blockMap = new LinkedHashMap<Sha256Hash, StoredBlock>() {
         @Override
         protected boolean removeEldestEntry(Map.Entry<Sha256Hash, StoredBlock> eldest) {
-            return blockMap.size() > 5000;
+            return blockMap.size() > 60 * 60 * 24 * 7 / NetworkParameters.TARGET_SPACING + 1; // KGW past block max
         }
     };
     private StoredBlock chainHead;
