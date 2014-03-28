@@ -859,7 +859,7 @@ public abstract class AbstractBlockChain {
         }
     }
     
-    private void checkDifficultyTransitionsKGW(StoredBlock blockLastSolved, Block nextBlock) throws BlockStoreException, VerificationException {
+    private strictfp void checkDifficultyTransitionsKGW(StoredBlock blockLastSolved, Block nextBlock) throws BlockStoreException, VerificationException {
 
         long timeDaySeconds = 60 * 60 * 24;
         long pastSecondsMin = timeDaySeconds / 4 ;
