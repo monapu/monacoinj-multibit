@@ -42,6 +42,15 @@ public class BuildCheckpoints {
 
         final long oneMonthAgo = now - (86400 * 14); //TODO: Make it higher later on
 
+        final byte[] buf = new byte[8];
+        final FileOutputStream targetCache = new FileOutputStream("targets", false);
+        long startTargetCache = params.getSwitchKGWBlock() - 6720;
+        if(startTargetCache < 0 )
+            startTargetCache = 0;
+        Utils.uint64ToByteArrayLE( startTargetCache , buf , 0);
+        final long startTargetCacheIn = startTargetCache;
+        targetCache.write( buf , 0 , 8 );
+
         chain.addListener(new AbstractBlockChainListener() {
             @Override
             public void notifyNewBestBlock(StoredBlock block) throws VerificationException {
@@ -51,11 +60,24 @@ public class BuildCheckpoints {
                             block.getHeader().getHash(), block.getHeight()));
                     checkpoints.put(height, block);
                 }
+
+                if( startTargetCacheIn <= height &&  
+                    block.getHeader().getTimeSeconds() <= oneMonthAgo){
+                    Utils.uint32ToByteArrayLE(block.getHeader().getDifficultyTarget(), buf , 0);
+                    Utils.uint32ToByteArrayLE(block.getHeader().getTimeSeconds() , buf , 4);
+                    try {
+                        targetCache.write( buf );
+                    } catch( java.io.IOException e ){
+
+                    }
+                }
             }
         }, Threading.SAME_THREAD);
 
         peerGroup.startAndWait();
         peerGroup.downloadBlockChain();
+
+        targetCache.close();
 
         checkState(checkpoints.size() > 0);
 

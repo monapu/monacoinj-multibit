@@ -36,6 +36,11 @@ import java.util.concurrent.locks.ReentrantLock;
 import static com.google.common.base.Preconditions.*;
 import static java.lang.String.format;
 
+import java.io.RandomAccessFile;
+import java.io.File;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 /**
  * <p>An AbstractBlockChain holds a series of {@link Block} objects, links them together, and knows how to verify that
  * the chain follows the rules of the {@link NetworkParameters} for this chain.</p>
@@ -879,6 +884,15 @@ public abstract class AbstractBlockChain {
         // Block blockLastSolvedHeader = blockLastSolved.getHeader();
         
         StoredBlock blockReading = blockLastSolved;
+        BigInteger readingDifficultyTargetAsInteger = BigInteger.ZERO;
+        long readingTimeSeconds = -1;
+        long readingHeight = -1;
+        if(blockReading != null){
+            readingDifficultyTargetAsInteger = blockReading.getHeader().getDifficultyTargetAsInteger();
+            readingTimeSeconds = blockReading.getHeader().getTimeSeconds();
+            readingHeight = blockReading.getHeight();
+        }
+        
         long pastBlocksMass = 0;
         double pastRateAdjustmentRatio = 1.0D ;
         BigInteger pastTargetAverage = null;
@@ -890,11 +904,11 @@ public abstract class AbstractBlockChain {
             newTarget = params.getProofOfWorkLimit();
         } else {
             
-            for( long i = 1; ((blockReading != null) && (blockReading.getHeight() > 0)); i++){
+            for( long i = 1; readingHeight > 0; i++){
                 if( pastBlocksMax > 0 && i > pastBlocksMax ) 
                     break;
                 pastBlocksMass++;
-                BigInteger thisTarget = blockReading.getHeader().getDifficultyTargetAsInteger();
+                BigInteger thisTarget = readingDifficultyTargetAsInteger;
                 if( i == 1) {
                     pastTargetAverage = thisTarget;
                 } else {
@@ -907,7 +921,7 @@ public abstract class AbstractBlockChain {
                 // c++ のGetBlockTimeは unix時間
                 pastRateActualSeconds =
                     blockLastSolved.getHeader().getTimeSeconds() - 
-                    blockReading.getHeader().getTimeSeconds();
+                    readingTimeSeconds;
                 pastRateTargetSeconds =
                      NetworkParameters.TARGET_SPACING * pastBlocksMass;
                 pastRateAdjustmentRatio = 1D;
@@ -929,10 +943,29 @@ public abstract class AbstractBlockChain {
                         break;
                     }
                 }
-                StoredBlock prevBlock = blockReading.getPrev(blockStore);
-                if( prevBlock == null)
-                    break;
-                blockReading = prevBlock;
+
+                StoredBlock prevBlock = null;
+                if(blockReading != null)
+                    prevBlock = blockReading.getPrev(blockStore);
+
+                if(prevBlock == null){
+                    readingHeight--;
+                    TargetAndTime targetAndTime = getTargetAndTimeFromFile( readingHeight );
+                    if( targetAndTime == null){
+                        log.info("give up to verify KGW target value. no blockdata {}" , readingHeight );
+                        return;
+                    }
+                    readingDifficultyTargetAsInteger = targetAndTime.target;
+                    readingTimeSeconds = targetAndTime.time;
+                    blockReading = null;
+
+                } else {
+                    blockReading = prevBlock;
+                    readingDifficultyTargetAsInteger = 
+                        blockReading.getHeader().getDifficultyTargetAsInteger();
+                    readingTimeSeconds = blockReading.getHeader().getTimeSeconds();
+                    readingHeight = blockReading.getHeight();
+                }
             } // for
             
             newTarget = pastTargetAverage;
@@ -955,7 +988,73 @@ public abstract class AbstractBlockChain {
         }
         
     }
+    
+    private class TargetAndTime {
+        public BigInteger target = null;
+        public long time = -1;
+    }
 
+    private RandomAccessFile targetAndTimeFile = null;
+    private long targetAndTimeFileStart = -1;
+    private LinkedHashMap<Long,TargetAndTime> targetAndTimeFileCache = null;
+    private final int TARGET_CACHE_MAX = 7000;
+    
+    public void setTargetAndTimeFile( File path ){
+        if(path.exists()){
+            try{
+                targetAndTimeFile = 
+                    new RandomAccessFile( path , "r");
+                byte[] buf = new byte[8];
+                targetAndTimeFile.seek(0);
+                targetAndTimeFile.readFully( buf , 0 , 8 );
+                targetAndTimeFileStart = Utils.readInt64(buf , 0 );
+                
+                targetAndTimeFileCache = 
+                    new LinkedHashMap<Long,TargetAndTime>(TARGET_CACHE_MAX){
+                    protected boolean removeEldestEntry(Map.Entry<Long,TargetAndTime> eldest)  {
+                        return size() > TARGET_CACHE_MAX;
+                    }
+                };
+            } catch(Exception e) {
+                log.error("failed to prepare outer target/time data file.");
+            }
+        }
+    }
+    private TargetAndTime getTargetAndTimeFromFile( long height ){
+
+        TargetAndTime result = null;
+        
+        if( targetAndTimeFile != null
+            && targetAndTimeFileStart > -1 
+            && targetAndTimeFileStart <= height ){
+
+            result = targetAndTimeFileCache.get( Long.valueOf(height) );
+            if( result == null){
+                result = new TargetAndTime();
+                
+                long pos = (height - targetAndTimeFileStart + 1 ) * 8;
+                try {
+                    byte[] buf = new byte[8];
+                    targetAndTimeFile.seek( pos );
+                    targetAndTimeFile.readFully( buf , 0 , 8 );
+                    
+                    result.target = Utils.decodeCompactBits(Utils.readUint32( buf , 0 ));
+                    result.time   = Utils.readUint32( buf , 4 );
+                    
+                    synchronized(targetAndTimeFileCache) {
+                        targetAndTimeFileCache.put( Long.valueOf(height) , result );
+                    }
+                    
+                } catch (Exception e){
+                    // log.error("can't read target/time data file at height {}" , height);
+                }
+            } else {
+                //
+            }
+        }
+        return result;
+    }
+    
     private void checkTestnetDifficulty(StoredBlock storedPrev, Block prev, Block next) throws VerificationException, BlockStoreException {
         checkState(lock.isHeldByCurrentThread());
         // After 15th February 2012 the rules on the testnet change to avoid people running up the difficulty
@@ -1092,4 +1191,6 @@ public abstract class AbstractBlockChain {
         }, Threading.SAME_THREAD);
         return result;
     }
+
+
 }
