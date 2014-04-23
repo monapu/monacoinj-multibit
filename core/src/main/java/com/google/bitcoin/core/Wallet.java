@@ -1,9 +1,6 @@
 /**
  * Copyright 2013 Google Inc.
-<<<<<<< HEAD
-=======
  * Copyright 2014 Andreas Schildbach
->>>>>>> bitcoinj-upstream/release-0.11
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -48,6 +45,7 @@ import org.multibit.store.MultiBitWalletVersion;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.spongycastle.crypto.params.KeyParameter;
+import org.spongycastle.util.encoders.Hex;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -489,6 +487,25 @@ public class Wallet implements Serializable, BlockChainListener, PeerFilterProvi
         }
     }
 
+    /**
+     * <p>
+     * Disables auto-saving, after it had been enabled with
+     * {@link Wallet#autosaveToFile(java.io.File, long, java.util.concurrent.TimeUnit, com.google.bitcoin.wallet.WalletFiles.Listener)}
+     * before. This method blocks until finished.
+     * </p>
+     */
+    public void shutdownAutosaveAndWait() {
+        lock.lock();
+        try {
+            WalletFiles files = vFileManager;
+            vFileManager = null;
+            checkState(files != null, "Auto saving not enabled.");
+            files.shutdownAndWait();
+        } finally {
+            lock.unlock();
+        }
+    }
+
     private void saveLater() {
         WalletFiles files = vFileManager;
         if (files != null)
@@ -542,7 +559,7 @@ public class Wallet implements Serializable, BlockChainListener, PeerFilterProvi
     }
     
     public boolean isConsistent() {
-        // Seems too agressive on replay, switch off.
+        // Seems too aggressive on replay, switch off.
         return true;
     }
 
@@ -1115,10 +1132,13 @@ public class Wallet implements Serializable, BlockChainListener, PeerFilterProvi
                     log.warn("updateForSpends: saw double spend from chain, handling later.");
                 } else {
                     // We saw two pending transactions that double spend each other. We don't know which will win.
-                    // This should not happen.
-                    log.warn("Saw two pending transactions double spend each other: {} vs {}",
-                            tx.getHash(), input.getConnectedOutput().getSpentBy().getParentTransaction().getHash());
+                    // This can happen in the case of bad network nodes that mutate transactions. Do a hex dump
+                    // so the exact nature of the mutation can be examined.
+                    log.warn("Saw two pending transactions double spend each other");
                     log.warn("  offending input is input {}", tx.getInputs().indexOf(input));
+                    log.warn("{}: {}", tx.getHash(), new String(Hex.encode(tx.unsafeBitcoinSerialize())));
+                    Transaction other = input.getConnectedOutput().getSpentBy().getParentTransaction();
+                    log.warn("{}: {}", other.getHash(), new String(Hex.encode(tx.unsafeBitcoinSerialize())));
                 }
             } else if (result == TransactionInput.ConnectionResult.SUCCESS) {
                 // Otherwise we saw a transaction spend our coins, but we didn't try and spend them ourselves yet.
@@ -1659,7 +1679,7 @@ public class Wallet implements Serializable, BlockChainListener, PeerFilterProvi
         /**
          * The AES key to use to decrypt the private keys before signing.
          * If null then no decryption will be performed and if decryption is required an exception will be thrown.
-         * You can get this from a password by doing wallet.getKeyCrypter().derivePassword(password).
+         * You can get this from a password by doing wallet.getKeyCrypter().deriveKey(password).
          */
         public KeyParameter aesKey = null;
 
@@ -2130,10 +2150,10 @@ public class Wallet implements Serializable, BlockChainListener, PeerFilterProvi
 
                 // If the key has a keyCrypter that does not match the Wallet's then a KeyCrypterException is thrown.
                 // This is done because only one keyCrypter is persisted per Wallet and hence all the keys must be homogenous.
-                if (keyCrypter != null && keyCrypter.getUnderstoodEncryptionType() != EncryptionType.UNENCRYPTED) {
-                    if (key.isEncrypted() && !keyCrypter.equals(key.getKeyCrypter())) {
-                        throw new KeyCrypterException("Cannot add key " + key.toString() + " because the keyCrypter does not match the wallets. Keys must be homogenous.");
-                    }
+                if (isEncrypted() && (!key.isEncrypted() || !keyCrypter.equals(key.getKeyCrypter()))) {
+                    throw new KeyCrypterException("Cannot add key " + key.toString() + " because the keyCrypter does not match the wallets. Keys must be homogenous.");
+                } else if (key.isEncrypted() && !isEncrypted()) {
+                    throw new KeyCrypterException("Cannot add key because it's encrypted and this wallet is not.");
                 }
                 keychain.add(key);
                 added++;
@@ -2418,9 +2438,10 @@ public class Wallet implements Serializable, BlockChainListener, PeerFilterProvi
         lock.lock();
         try {
             StringBuilder builder = new StringBuilder();
-            BigInteger balance = getBalance(BalanceType.ESTIMATED);
-            builder.append(String.format("Wallet containing %s BTC (%d satoshis) in:%n",
-                    bitcoinValueToPlainString(balance), balance.longValue()));
+            BigInteger estimatedBalance = getBalance(BalanceType.ESTIMATED);
+            BigInteger availableBalance = getBalance(BalanceType.AVAILABLE);
+            builder.append(String.format("Wallet containing %s BTC (available: %s BTC) in:%n",
+                    bitcoinValueToPlainString(estimatedBalance), bitcoinValueToPlainString(availableBalance)));
             builder.append(String.format("  %d pending transactions%n", pending.size()));
             builder.append(String.format("  %d unspent transactions%n", unspent.size()));
             builder.append(String.format("  %d spent transactions%n", spent.size()));
@@ -2435,8 +2456,11 @@ public class Wallet implements Serializable, BlockChainListener, PeerFilterProvi
             // Do the keys.
             builder.append("\nKeys:\n");
             for (ECKey key : keychain) {
+                final Address address = key.toAddress(params);
                 builder.append("  addr:");
-                builder.append(key.toAddress(params));
+                builder.append(address.toString());
+                builder.append(" hash160:");
+                builder.append(Utils.bytesToHexString(address.getHash160()));
                 builder.append(" ");
                 builder.append(includePrivateKeys ? key.toStringWithPrivate() : key.toString());
                 builder.append("\n");

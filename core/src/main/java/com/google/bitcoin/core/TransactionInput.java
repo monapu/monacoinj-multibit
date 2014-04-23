@@ -16,6 +16,7 @@
 
 package com.google.bitcoin.core;
 
+import com.google.bitcoin.IsMultiBitClass;
 import com.google.bitcoin.script.Script;
 
 import javax.annotation.Nullable;
@@ -25,8 +26,6 @@ import java.io.OutputStream;
 import java.io.Serializable;
 import java.lang.ref.WeakReference;
 import java.util.Map;
-
-import com.google.bitcoin.IsMultiBitClass;
 
 import static com.google.common.base.Preconditions.checkElementIndex;
 import static com.google.common.base.Preconditions.checkNotNull;
@@ -405,10 +404,12 @@ public class TransactionInput extends ChildMessage implements Serializable, IsMu
      * @throws VerificationException If the outpoint doesn't match the given output.
      */
     public void verify(TransactionOutput output) throws VerificationException {
-        if (!getOutpoint().getHash().equals(output.parentTransaction.getHash()))
-            throw new VerificationException("This input does not refer to the tx containing the output.");
-        if (getOutpoint().getIndex() != output.getIndex())
-            throw new VerificationException("This input refers to a different output on the given tx.");
+        if (output.parentTransaction != null) {
+            if (!getOutpoint().getHash().equals(output.parentTransaction.getHash()))
+                throw new VerificationException("This input does not refer to the tx containing the output.");
+            if (getOutpoint().getIndex() != output.getIndex())
+                throw new VerificationException("This input refers to a different output on the given tx.");
+        }
         Script pubKey = output.getScriptPubKey();
         int myIndex = parentTransaction.getInputs().indexOf(this);
         getScriptSig().correctlySpends(parentTransaction, myIndex, pubKey, true);

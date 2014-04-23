@@ -59,6 +59,7 @@ public class ChannelConnectionTest extends TestWithWallet {
     @Before
     public void setUp() throws Exception {
         super.setUp();
+        Utils.setMockClock(); // Use mock clock
         sendMoneyToWallet(Utils.COIN, AbstractBlockChain.NewBlockType.BEST_CHAIN);
         sendMoneyToWallet(Utils.COIN, AbstractBlockChain.NewBlockType.BEST_CHAIN);
         wallet.addExtension(new StoredPaymentChannelClientStates(wallet, failBroadcaster));
@@ -263,7 +264,7 @@ public class ChannelConnectionTest extends TestWithWallet {
     @Test
     public void testChannelResume() throws Exception {
         // Tests various aspects of channel resuming.
-        Utils.rollMockClock(0);
+        Utils.setMockClock();
 
         final Sha256Hash someServerId = Sha256Hash.create(new byte[]{});
 

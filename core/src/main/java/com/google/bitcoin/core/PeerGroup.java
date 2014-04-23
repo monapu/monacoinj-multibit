@@ -200,8 +200,8 @@ public class PeerGroup extends AbstractExecutionThreadService implements Transac
 
     // Exponential backoff for peers starts at 1 second and maxes at 10 minutes.
     private ExponentialBackoff.Params peerBackoffParams = new ExponentialBackoff.Params(1000, 1.5f, 10 * 60 * 1000);
-    // Tracks failures globally in case of a network failure
-    private ExponentialBackoff groupBackoff = new ExponentialBackoff(new ExponentialBackoff.Params(100, 1.1f, 30 * 1000));
+    // Tracks failures globally in case of a network failure.
+    private ExponentialBackoff groupBackoff = new ExponentialBackoff(new ExponentialBackoff.Params(1000, 1.5f, 10 * 1000));
 
     // Things for the dedicated PeerGroup management thread to do.
     private LinkedBlockingQueue<Runnable> jobQueue = new LinkedBlockingQueue<Runnable>();
@@ -342,7 +342,7 @@ public class PeerGroup extends AbstractExecutionThreadService implements Transac
             do {
                 try {
                     connectToAnyPeer();
-                } catch(PeerDiscoveryException e) {
+                } catch (PeerDiscoveryException e) {
                     groupBackoff.trackFailure();
                 }
             } while (isRunning() && countConnectedAndPendingPeers() < getMaxConnections());
@@ -400,7 +400,7 @@ public class PeerGroup extends AbstractExecutionThreadService implements Transac
      * Sets the {@link VersionMessage} that will be announced on newly created connections. A version message is
      * primarily interesting because it lets you customize the "subVer" field which is used a bit like the User-Agent
      * field from HTTP. It means your client tells the other side what it is, see
-     * <a href="https://en.bitcoin.it/wiki/BIP_0014">BIP 14</a>.
+     * <a href="https://github.com/bitcoin/bips/blob/master/bip-0014.mediawiki">BIP 14</a>.
      *
      * The VersionMessage you provide is copied and the best chain height/time filled in for each new connection,
      * therefore you don't have to worry about setting that. The provided object is really more of a template.
@@ -575,6 +575,8 @@ public class PeerGroup extends AbstractExecutionThreadService implements Transac
     }
 
     protected void discoverPeers() throws PeerDiscoveryException {
+        if (peerDiscoverers.isEmpty())
+            throw new PeerDiscoveryException("No peer discoverers registered");
         long start = System.currentTimeMillis();
         Set<PeerAddress> addressSet = Sets.newHashSet();
         for (PeerDiscovery peerDiscovery : peerDiscoverers) {
@@ -630,10 +632,10 @@ public class PeerGroup extends AbstractExecutionThreadService implements Transac
         final State state = state();
         if (!(state == State.STARTING || state == State.RUNNING)) return;
 
-        final PeerAddress addr;
+        PeerAddress addr = null;
 
         long nowMillis = Utils.currentTimeMillis();
-
+        long retryTime = 0;
         lock.lock();
         try {
             if (!haveReadyInactivePeer(nowMillis)) {
@@ -646,18 +648,21 @@ public class PeerGroup extends AbstractExecutionThreadService implements Transac
                 return;
             }
             addr = inactives.poll();
+            retryTime = backoffMap.get(addr).getRetryTime();
         } finally {
+            // discoverPeers might throw an exception if something goes wrong: we then hit this path with addr == null.
+            retryTime = Math.max(retryTime, groupBackoff.getRetryTime());
             lock.unlock();
-        }
-
-        // Delay if any backoff is required
-        long retryTime = Math.max(backoffMap.get(addr).getRetryTime(), groupBackoff.getRetryTime());
-        if (retryTime > nowMillis) {
-            // Sleep until retry time
-            Utils.sleep(retryTime - nowMillis);
+            if (retryTime > nowMillis) {
+                // Sleep until retry time
+                final long millis = retryTime - nowMillis;
+                log.info("Waiting {} msec before next connect attempt {}", millis, addr == null ? "" : " to " + addr);
+                Utils.sleep(millis);
+            }
         }
 
         // This method constructs a Peer and puts it into pendingPeers.
+        checkNotNull(addr);   // Help static analysis which can't see that addr is always set if we didn't throw above.
         connectTo(addr, false);
     }
 
@@ -1408,39 +1413,11 @@ public class PeerGroup extends AbstractExecutionThreadService implements Transac
      * If multiple heights are tied, the highest is returned. If no peers are connected, returns zero.
      */
     public static int getMostCommonChainHeight(final List<Peer> peers) {
-        int s = peers.size();
-        int[] heights = new int[s];
-        int[] counts = new int[s];
-        int maxCount = 0;
-        // Calculate the frequencies of each reported height.
-        for (Peer peer : peers) {
-            int h = (int) peer.getBestHeight();
-            // Find the index of the peers height in the heights array.
-            for (int cursor = 0; cursor < s; cursor++) {
-                if (heights[cursor] == h) {
-                    maxCount = Math.max(++counts[cursor], maxCount);
-                    break;
-                } else if (heights[cursor] == 0) {
-                    // A new height we didn't see before.
-                    checkState(counts[cursor] == 0);
-                    heights[cursor] = h;
-                    counts[cursor] = 1;
-                    maxCount = Math.max(maxCount, 1);
-                    break;
-                }
-            }
-        }
-        // Find the heights that have the highest frequencies.
-        int[] freqHeights = new int[s];
-        int cursor = 0;
-        for (int i = 0; i < s; i++) {
-            if (counts[i] == maxCount) {
-                freqHeights[cursor++] = heights[i];
-            }
-        }
-        // Return the highest of the most common heights.
-        Arrays.sort(freqHeights);
-        return freqHeights[s - 1];
+        if (peers.isEmpty())
+            return 0;
+        List<Integer> heights = new ArrayList<Integer>(peers.size());
+        for (Peer peer : peers) heights.add((int) peer.getBestHeight());
+        return Utils.maxOfMostFreq(heights);
     }
 
     private static class PeerAndPing {
