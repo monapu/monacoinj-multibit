@@ -34,10 +34,12 @@ public class TestNet3Params extends NetworkParameters {
         packetMagic = 0xfcc1b7dc; // correspond to pchMessageStart in main.cpp
         interval = INTERVAL;
         digishieldInterval = DIGISHIELD_INTERVAL;
-        // switchKGWBlock = 0;
-        // switchDigishieldBlock = 300;
+        
+        //switchKGWBlock = 0;
+        //switchDigishieldBlock = 300;
         switchKGWBlock = SWITCH_KGW_BLOCK;
         switchDigishieldBlock = SWITCH_DIGISHIELD_BLOCK;
+
         targetTimespan = TARGET_TIMESPAN;
         digishieldTargetTimespan = DIGISHIELD_TARGET_TIMESPAN;
         proofOfWorkLimit = Utils.decodeCompactBits(0x1e0fffffL);
