@@ -62,7 +62,8 @@ public class BuildCheckpoints {
                 }
 
                 if( startTargetCacheIn <= height &&  
-                    block.getHeader().getTimeSeconds() <= oneMonthAgo){
+                    block.getHeader().getTimeSeconds() <= oneMonthAgo &&
+                    height < params.getSwitchDigishieldBlock()){
                     Utils.uint32ToByteArrayLE(block.getHeader().getDifficultyTarget(), buf , 0);
                     Utils.uint32ToByteArrayLE(block.getHeader().getTimeSeconds() , buf , 4);
                     try {

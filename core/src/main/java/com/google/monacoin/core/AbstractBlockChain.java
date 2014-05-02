@@ -786,13 +786,22 @@ public abstract class AbstractBlockChain {
         checkState(lock.isHeldByCurrentThread());
         Block prev = storedPrev.getHeader();
         
-        if((storedPrev.getHeight() + 1) >= params.getSwitchKGWBlock() ) {
+        if((storedPrev.getHeight() + 1) >= params.getSwitchKGWBlock() 
+           && (storedPrev.getHeight() + 1) < params.getSwitchDigishieldBlock()) {
             checkDifficultyTransitionsKGW( storedPrev , nextBlock);
             return;
         }
         
+        boolean useDigishield = storedPrev.getHeight() + 1 >= params.getSwitchDigishieldBlock();
+        int retargetInterval = params.getInterval();
+        int retargetTimespan = params.getTargetTimespan();
+        if(useDigishield){
+            retargetInterval = params.getDigishieldInterval();
+            retargetTimespan = params.getDigishieldTargetTimespan();
+        }
+
         // Is this supposed to be a difficulty transition point?
-        if ((storedPrev.getHeight() + 1) % params.getInterval() != 0) {
+        if ((storedPrev.getHeight() + 1) % retargetInterval != 0) {
 
             // TODO: Refactor this hack after 0.5 is released and we stop supporting deserialization compatibility.
             // This should be a method of the NetworkParameters, which should in turn be using singletons and a subclass
@@ -814,9 +823,9 @@ public abstract class AbstractBlockChain {
         // two weeks after the initial block chain download.
         long now = System.currentTimeMillis();
         StoredBlock cursor = blockStore.get(prev.getHash());
-        int goBack = params.getInterval() - 1;
-        if (cursor.getHeight()+1 != params.getInterval())
-            goBack = params.getInterval();
+        int goBack = retargetInterval - 1;
+        if (cursor.getHeight()+1 != retargetInterval)
+            goBack = retargetInterval;
 
         for (int i = 0; i < goBack; i++) {
             if (cursor == null) {
@@ -841,13 +850,20 @@ public abstract class AbstractBlockChain {
         Block blockIntervalAgo = cursor.getHeader();
         int timespan = (int) (prev.getTimeSeconds() - blockIntervalAgo.getTimeSeconds());
         // Limit the adjustment step.
-        final int targetTimespan = params.getTargetTimespan();
+        final int targetTimespan = retargetTimespan;
         // Limit the adjustment step.
-        if (timespan < targetTimespan / 4)
-            timespan = targetTimespan / 4;
-        if (timespan > targetTimespan * 4)
-            timespan = targetTimespan * 4;
-        
+        if(useDigishield){
+            timespan = retargetTimespan + (timespan - retargetTimespan)/8;
+            if (timespan < (retargetTimespan - (retargetTimespan/4)) ) 
+                timespan = (retargetTimespan - (retargetTimespan/4));
+            if (timespan > (retargetTimespan + (retargetTimespan/2)) ) 
+                timespan = (retargetTimespan + (retargetTimespan/2));
+        }else{
+            if (timespan < targetTimespan / 4)
+                timespan = targetTimespan / 4;
+            if (timespan > targetTimespan * 4)
+                timespan = targetTimespan * 4;
+        }
         BigInteger newDifficulty = Utils.decodeCompactBits(prev.getDifficultyTarget());
         newDifficulty = newDifficulty.multiply(BigInteger.valueOf(timespan));
         newDifficulty = newDifficulty.divide(BigInteger.valueOf(targetTimespan));

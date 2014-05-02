@@ -29,8 +29,11 @@ public class MainNetParams extends NetworkParameters {
     public MainNetParams() {
         super();
         interval = INTERVAL;
+        digishieldInterval = DIGISHIELD_INTERVAL;
         targetTimespan = TARGET_TIMESPAN;
+        digishieldTargetTimespan = DIGISHIELD_TARGET_TIMESPAN;
         switchKGWBlock = SWITCH_KGW_BLOCK;
+        switchDigishieldBlock = SWITCH_DIGISHIELD_BLOCK;
         proofOfWorkLimit = Utils.decodeCompactBits(0x1e0fffffL);
         dumpedPrivateKeyHeader = 178; //This is always addressHeader + 128
         addressHeader = 50;

@@ -70,8 +70,11 @@ public abstract class NetworkParameters implements Serializable {
     protected int addressHeader;
     protected int dumpedPrivateKeyHeader;
     protected int interval;
+    protected int digishieldInterval;
     protected int switchKGWBlock;
+    protected int switchDigishieldBlock;
     protected int targetTimespan;
+    protected int digishieldTargetTimespan;
     protected byte[] alertSigningKey;
 
     /**
@@ -120,10 +123,14 @@ public abstract class NetworkParameters implements Serializable {
 
 
     public static final int TARGET_TIMESPAN = (int)(1.1 * 24 * 60 * 60);  // 1.1d per difficulty cycle, on average.
+    public static final int DIGISHIELD_TARGET_TIMESPAN = 
+        (int)(1.5 * 60); // one block;
     public static final int TARGET_SPACING = (int)(1.5 * 60);  // 1.5 minutes per block.
     public static final int INTERVAL = TARGET_TIMESPAN / TARGET_SPACING;
+    public static final int DIGISHIELD_INTERVAL = DIGISHIELD_TARGET_TIMESPAN / TARGET_SPACING;
     
     public static final int SWITCH_KGW_BLOCK = 80000;
+    public static final int SWITCH_DIGISHIELD_BLOCK = 140000;
 
     /**
      * Blocks with a timestamp after this should enforce BIP 16, aka "Pay to script hash". This BIP changed the
@@ -275,6 +282,9 @@ public abstract class NetworkParameters implements Serializable {
     public int getTargetTimespan() {
         return targetTimespan;
     }
+    public int getDigishieldTargetTimespan() {
+        return digishieldTargetTimespan;
+    }
 
     /**
      * The version codes that prefix addresses which are acceptable on this network. Although Satoshi intended these to
@@ -296,9 +306,15 @@ public abstract class NetworkParameters implements Serializable {
     public int getInterval() {
         return interval;
     }
+    public int getDigishieldInterval() {
+        return digishieldInterval;
+    }
 
     public int getSwitchKGWBlock() {
         return switchKGWBlock;
+    }
+    public int getSwitchDigishieldBlock() {
+        return switchDigishieldBlock;
     }
 
     /** What the easiest allowable proof of work should be. */
