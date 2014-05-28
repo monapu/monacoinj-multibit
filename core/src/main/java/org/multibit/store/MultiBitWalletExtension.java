@@ -16,8 +16,8 @@
 
 package org.multibit.store;
 
-import com.google.monacoin.core.Wallet;
-import com.google.monacoin.core.WalletExtension;
+import com.google.bitcoin.core.Wallet;
+import com.google.bitcoin.core.WalletExtension;
 
 /**
  * Wallet extension to cater for MultiBit wallets
