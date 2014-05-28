@@ -45,7 +45,8 @@ public class TestNet3Params extends NetworkParameters {
         proofOfWorkLimit = Utils.decodeCompactBits(0x1e0fffffL);
         port = 19401;
         addressHeader = 111;
-        acceptableAddressCodes = new int[] { 111 };
+        p2shHeader = 196;
+        acceptableAddressCodes = new int[] { addressHeader, p2shHeader };
         dumpedPrivateKeyHeader = 239;
         genesisBlock.setTime(1388479759L);
         genesisBlock.setDifficultyTarget(0x1e0ffff0L);
@@ -68,5 +69,9 @@ public class TestNet3Params extends NetworkParameters {
             instance = new TestNet3Params();
         }
         return instance;
+    }
+
+    public String getPaymentProtocolId() {
+        return PAYMENT_PROTOCOL_ID_TESTNET;
     }
 }

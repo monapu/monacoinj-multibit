@@ -17,8 +17,10 @@
 package com.google.bitcoin.script;
 
 import com.google.bitcoin.core.*;
+import com.google.bitcoin.params.MainNetParams;
 import com.google.bitcoin.params.TestNet3Params;
 import com.google.common.collect.Lists;
+
 import org.junit.Test;
 import org.spongycastle.util.encoders.Hex;
 
@@ -59,6 +61,7 @@ public class ScriptTest {
         // Check we can extract the to address
         byte[] pubkeyBytes = Hex.decode(pubkeyProg);
         Script pubkey = new Script(pubkeyBytes);
+        assertEquals("DUP HASH160 [33e81a941e64cda12c6a299ed322ddbdd03f8d0e] EQUALVERIFY CHECKSIG", pubkey.toString());
         Address toAddr = new Address(params, pubkey.getPubKeyHash());
         assertEquals("mkFQohBpy2HDXrCwyMrYL5RtfrmeiuuPY2", toAddr.toString());
     }
@@ -83,6 +86,12 @@ public class ScriptTest {
             // Expected.
         }
         // Actual execution is tested by the data driven tests.
+    }
+
+    @Test
+    public void testP2SHOutputScript() throws Exception {
+      Address p2shAddress = new Address(MainNetParams.get(), "35b9vsyH1KoFT5a5KtrKusaCcPLkiSo1tU");
+      assertTrue(ScriptBuilder.createOutputScript(p2shAddress).isSentToP2SH());
     }
 
     @Test
@@ -295,10 +304,12 @@ public class ScriptTest {
         NetworkParameters params = TestNet3Params.get();
         
         // Poor man's (aka. really, really poor) JSON parser (because pulling in a lib for this is probably not overkill)
+        int lineNum = -1;
         List<JSONObject> tx = new ArrayList<JSONObject>(3);
         in.read(); // remove first [
         StringBuffer buffer = new StringBuffer(1000);
         while (in.ready()) {
+            lineNum++;
             String line = in.readLine();
             if (line == null || line.equals("")) continue;
             buffer.append(line);
@@ -308,30 +319,38 @@ public class ScriptTest {
             while (tx.size() > 0 && tx.get(0).isList() && tx.get(0).list.size() == 1 && tx.get(0).list.get(0).isString())
                 tx.remove(0); // ignore last ]
             if (isFinished && tx.size() == 1 && tx.get(0).list.size() == 3) {
-                HashMap<TransactionOutPoint, Script> scriptPubKeys = new HashMap<TransactionOutPoint, Script>();
-                for (JSONObject input : tx.get(0).list.get(0).list) {
-                    String hash = input.list.get(0).string;
-                    int index = input.list.get(1).integer;
-                    String script = input.list.get(2).string;
-                    Sha256Hash sha256Hash = new Sha256Hash(Hex.decode(hash.getBytes(Charset.forName("UTF-8"))));
-                    scriptPubKeys.put(new TransactionOutPoint(params, index, sha256Hash), parseScriptString(script));
-                }
+                Transaction transaction = null;
+                try {
+                    HashMap<TransactionOutPoint, Script> scriptPubKeys = new HashMap<TransactionOutPoint, Script>();
+                    for (JSONObject input : tx.get(0).list.get(0).list) {
+                        String hash = input.list.get(0).string;
+                        int index = input.list.get(1).integer;
+                        String script = input.list.get(2).string;
+                        Sha256Hash sha256Hash = new Sha256Hash(Hex.decode(hash.getBytes(Charset.forName("UTF-8"))));
+                        scriptPubKeys.put(new TransactionOutPoint(params, index, sha256Hash), parseScriptString(script));
+                    }
 
-                byte[] bytes = tx.get(0).list.get(1).string.getBytes(Charset.forName("UTF-8"));
-                Transaction transaction = new Transaction(params, Hex.decode(bytes));
-                boolean enforceP2SH = tx.get(0).list.get(2).booleanValue;
-                assertTrue(tx.get(0).list.get(2).isBoolean());
-                
-                transaction.verify();
-                
-                for (int i = 0; i < transaction.getInputs().size(); i++) {
-                    TransactionInput input = transaction.getInputs().get(i);
-                    if (input.getOutpoint().getIndex() == 0xffffffffL)
-                        input.getOutpoint().setIndex(-1);
-                    assertTrue(scriptPubKeys.containsKey(input.getOutpoint()));
-                    input.getScriptSig().correctlySpends(transaction, i, scriptPubKeys.get(input.getOutpoint()), enforceP2SH);
+                    byte[] bytes = tx.get(0).list.get(1).string.getBytes(Charset.forName("UTF-8"));
+                    transaction = new Transaction(params, Hex.decode(bytes));
+                    boolean enforceP2SH = tx.get(0).list.get(2).booleanValue;
+                    assertTrue(tx.get(0).list.get(2).isBoolean());
+
+                    transaction.verify();
+
+                    for (int i = 0; i < transaction.getInputs().size(); i++) {
+                        TransactionInput input = transaction.getInputs().get(i);
+                        if (input.getOutpoint().getIndex() == 0xffffffffL)
+                            input.getOutpoint().setIndex(-1);
+                        assertTrue(scriptPubKeys.containsKey(input.getOutpoint()));
+                        input.getScriptSig().correctlySpends(transaction, i, scriptPubKeys.get(input.getOutpoint()), enforceP2SH);
+                    }
+                    tx.clear();
+                } catch (Exception e) {
+                    System.err.println("Exception processing line " + lineNum + ": " + line);
+                    if (transaction != null)
+                        System.err.println(transaction);
+                    throw e;
                 }
-                tx.clear();
             }
         }
         in.close();

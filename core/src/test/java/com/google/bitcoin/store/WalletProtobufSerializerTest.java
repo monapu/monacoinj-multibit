@@ -5,6 +5,7 @@ import com.google.bitcoin.core.*;
 import com.google.bitcoin.core.TransactionConfidence.ConfidenceType;
 import com.google.bitcoin.params.MainNetParams;
 import com.google.bitcoin.params.UnitTestParams;
+import com.google.bitcoin.script.ScriptBuilder;
 import com.google.bitcoin.utils.BriefLogFormatter;
 import com.google.bitcoin.utils.TestUtils;
 import com.google.bitcoin.utils.Threading;
@@ -18,6 +19,7 @@ import java.io.ByteArrayOutputStream;
 import java.math.BigInteger;
 import java.net.InetAddress;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.Iterator;
 import java.util.Set;
 
@@ -27,19 +29,24 @@ import static org.junit.Assert.*;
 public class WalletProtobufSerializerTest {
     static final NetworkParameters params = UnitTestParams.get();
     private ECKey myKey;
+    private ECKey myWatchedKey;
     private Address myAddress;
     private Wallet myWallet;
 
     public static String WALLET_DESCRIPTION  = "The quick brown fox lives in \u4f26\u6566"; // Beijing in Chinese
+    private long mScriptCreationTime;
 
     @Before
     public void setUp() throws Exception {
         BriefLogFormatter.initVerbose();
+        myWatchedKey = new ECKey();
         myKey = new ECKey();
         myKey.setCreationTimeSeconds(123456789L);
         myAddress = myKey.toAddress(params);
         myWallet = new Wallet(params);
         myWallet.addKey(myKey);
+        mScriptCreationTime = new Date().getTime() / 1000 - 1234;
+        myWallet.addWatchedAddress(myWatchedKey.toAddress(params), mScriptCreationTime);
         myWallet.setDescription(WALLET_DESCRIPTION);
     }
 
@@ -55,7 +62,13 @@ public class WalletProtobufSerializerTest {
                 wallet1.findKeyFromPubHash(myKey.getPubKeyHash()).getPrivKeyBytes());
         assertEquals("Wring creation time", myKey.getCreationTimeSeconds(),
                 wallet1.findKeyFromPubHash(myKey.getPubKeyHash()).getCreationTimeSeconds());
-        assertEquals("Wrong description", WALLET_DESCRIPTION, wallet1.getDescription());
+
+        assertEquals(mScriptCreationTime,
+                wallet1.getWatchedScripts().get(0).getCreationTimeSeconds());
+        assertEquals(1, wallet1.getWatchedScripts().size());
+        assertEquals(ScriptBuilder.createOutputScript(myWatchedKey.toAddress(params)),
+                wallet1.getWatchedScripts().get(0));
+        assertEquals(WALLET_DESCRIPTION, wallet1.getDescription());
     }
 
     @Test
@@ -66,7 +79,7 @@ public class WalletProtobufSerializerTest {
         t1.getConfidence().markBroadcastBy(new PeerAddress(InetAddress.getByName("1.2.3.4")));
         t1.getConfidence().markBroadcastBy(new PeerAddress(InetAddress.getByName("5.6.7.8")));
         t1.getConfidence().setSource(TransactionConfidence.Source.NETWORK);
-        myWallet.receivePending(t1, new ArrayList<Transaction>());
+        myWallet.receivePending(t1, null);
         Wallet wallet1 = roundTrip(myWallet);
         assertEquals(1, wallet1.getTransactions(true).size());
         assertEquals(v1, wallet1.getBalance(Wallet.BalanceType.ESTIMATED));

@@ -16,17 +16,13 @@
 
 package com.google.bitcoin.crypto;
 
+import com.google.bitcoin.core.ECKey;
 import com.google.common.collect.ImmutableList;
-import org.spongycastle.asn1.sec.SECNamedCurves;
-import org.spongycastle.asn1.x9.X9ECParameters;
 import org.spongycastle.crypto.digests.SHA512Digest;
 import org.spongycastle.crypto.macs.HMac;
-import org.spongycastle.crypto.params.ECDomainParameters;
 import org.spongycastle.crypto.params.KeyParameter;
-import org.spongycastle.math.ec.ECCurve;
 import org.spongycastle.math.ec.ECPoint;
 
-import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 
@@ -37,61 +33,41 @@ public final class HDUtils {
 
     private HDUtils() { }
 
-    private static final ECDomainParameters ecParams;
-
-    static {
-        // All clients must agree on the curve to use by agreement. Bitcoin uses secp256k1.
-        X9ECParameters params = SECNamedCurves.getByName("secp256k1");
-        ecParams = new ECDomainParameters(params.getCurve(), params.getG(), params.getN(), params.getH());
-    }
-
-    static HMac createHmacSha256Digest(byte[] key) {
+    static HMac createHmacSha512Digest(byte[] key) {
         SHA512Digest digest = new SHA512Digest();
         HMac hMac = new HMac(digest);
         hMac.init(new KeyParameter(key));
         return hMac;
     }
 
-    static byte[] hmacSha256(HMac hmacSha256, byte[] input) {
-        hmacSha256.reset();
-        hmacSha256.update(input, 0, input.length);
+    static byte[] hmacSha512(HMac hmacSha512, byte[] input) {
+        hmacSha512.reset();
+        hmacSha512.update(input, 0, input.length);
         byte[] out = new byte[64];
-        hmacSha256.doFinal(out, 0);
+        hmacSha512.doFinal(out, 0);
         return out;
     }
 
-    public static byte[] hmacSha256(byte[] key, byte[] data) {
-        return hmacSha256(createHmacSha256Digest(key), data);
-    }
-
-    static BigInteger toBigInteger(byte[] bytes) {
-        return new BigInteger(1, bytes);
+    public static byte[] hmacSha512(byte[] key, byte[] data) {
+        return hmacSha512(createHmacSha512Digest(key), data);
     }
 
     static ECPoint compressedCopy(ECPoint pubKPoint) {
-        return getCurve().createPoint(pubKPoint.getX().toBigInteger(), pubKPoint.getY().toBigInteger(), true);
-    }
-
-    static ECCurve getCurve() {
-        return getEcParams().getCurve();
+        return ECKey.CURVE.getCurve().createPoint(pubKPoint.getX().toBigInteger(), pubKPoint.getY().toBigInteger(), true);
     }
 
     static ECPoint toUncompressed(ECPoint pubKPoint) {
-        return getCurve().createPoint(pubKPoint.getX().toBigInteger(), pubKPoint.getY().toBigInteger(), false);
+        return ECKey.CURVE.getCurve().createPoint(pubKPoint.getX().toBigInteger(), pubKPoint.getY().toBigInteger(), false);
     }
 
     static byte[] toCompressed(byte[] uncompressedPoint) {
-        return compressedCopy(getCurve().decodePoint(uncompressedPoint)).getEncoded();
+        return compressedCopy(ECKey.CURVE.getCurve().decodePoint(uncompressedPoint)).getEncoded();
     }
 
     static byte[] longTo4ByteArray(long n) {
         byte[] bytes = Arrays.copyOfRange(ByteBuffer.allocate(8).putLong(n).array(), 4, 8);
         assert bytes.length == 4 : bytes.length;
         return bytes;
-    }
-
-    static ECDomainParameters getEcParams() {
-        return ecParams;
     }
 
     static byte[] getBytes(ECPoint pubKPoint) {

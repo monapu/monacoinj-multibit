@@ -20,9 +20,14 @@ import com.google.bitcoin.core.*;
 import com.google.bitcoin.crypto.TransactionSignature;
 import com.google.bitcoin.script.Script;
 import com.google.bitcoin.script.ScriptBuilder;
+import com.google.bitcoin.utils.Threading;
+import com.google.bitcoin.wallet.AllowUnconfirmedCoinSelector;
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.ImmutableList;
+import com.google.common.base.Throwables;
 import com.google.common.collect.Lists;
+import com.google.common.util.concurrent.FutureCallback;
+import com.google.common.util.concurrent.Futures;
+import com.google.common.util.concurrent.ListenableFuture;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -63,6 +68,7 @@ import static com.google.common.base.Preconditions.*;
  */
 public class PaymentChannelClientState {
     private static final Logger log = LoggerFactory.getLogger(PaymentChannelClientState.class);
+    private static final int CONFIRMATIONS_FOR_DELETE = 3;
 
     private final Wallet wallet;
     // Both sides need a key (private in our case, public for the server) in order to manage the multisig contract
@@ -70,7 +76,7 @@ public class PaymentChannelClientState {
     private final ECKey myKey, serverMultisigKey;
     // How much value (in satoshis) is locked up into the channel.
     private final BigInteger totalValue;
-    // When the channel will automatically close in favor of the client, if the server halts before protocol termination
+    // When the channel will automatically settle in favor of the client, if the server halts before protocol termination
     // specified in terms of block timestamps (so it can off real time by a few hours).
     private final long expiryTime;
 
@@ -96,7 +102,8 @@ public class PaymentChannelClientState {
         SAVE_STATE_IN_WALLET,
         PROVIDE_MULTISIG_CONTRACT_TO_SERVER,
         READY,
-        EXPIRED
+        EXPIRED,
+        CLOSED
     }
     private State state;
 
@@ -117,6 +124,20 @@ public class PaymentChannelClientState {
         this.valueToMe = checkNotNull(storedClientChannel.valueToMe);
         this.storedChannel = storedClientChannel;
         this.state = State.READY;
+        initWalletListeners();
+    }
+
+    /**
+     * Returns true if the tx is a valid settlement transaction.
+     */
+    public synchronized boolean isSettlementTransaction(Transaction tx) {
+        try {
+            tx.verify();
+            tx.getInput(0).verify(multisigContract.getOutput(0));
+            return true;
+        } catch (VerificationException e) {
+            return false;
+        }
     }
 
     /**
@@ -138,6 +159,7 @@ public class PaymentChannelClientState {
                                      BigInteger value, long expiryTimeInSeconds) throws VerificationException {
         checkArgument(value.compareTo(BigInteger.ZERO) > 0);
         this.wallet = checkNotNull(wallet);
+        initWalletListeners();
         this.serverMultisigKey = checkNotNull(serverMultisigKey);
         if (!myKey.isPubKeyCanonical() || !serverMultisigKey.isPubKeyCanonical())
             throw new VerificationException("Pubkey was not canonical (ie non-standard)");
@@ -145,6 +167,58 @@ public class PaymentChannelClientState {
         this.valueToMe = this.totalValue = checkNotNull(value);
         this.expiryTime = expiryTimeInSeconds;
         this.state = State.NEW;
+    }
+
+    private synchronized void initWalletListeners() {
+        // Register a listener that watches out for the server closing the channel.
+        if (storedChannel != null && storedChannel.close != null) {
+            watchCloseConfirmations();
+        }
+        wallet.addEventListener(new AbstractWalletEventListener() {
+            @Override
+            public void onCoinsReceived(Wallet wallet, Transaction tx, BigInteger prevBalance, BigInteger newBalance) {
+                synchronized (PaymentChannelClientState.this) {
+                    if (multisigContract == null) return;
+                    if (isSettlementTransaction(tx)) {
+                        log.info("Close: transaction {} closed contract {}", tx.getHash(), multisigContract.getHash());
+                        // Record the fact that it was closed along with the transaction that closed it.
+                        state = State.CLOSED;
+                        if (storedChannel == null) return;
+                        storedChannel.close = tx;
+                        updateChannelInWallet();
+                        watchCloseConfirmations();
+                    }
+                }
+            }
+        }, Threading.SAME_THREAD);
+    }
+
+    private void watchCloseConfirmations() {
+        // When we see the close transaction get a few confirmations, we can just delete the record
+        // of this channel along with the refund tx from the wallet, because we're not going to need
+        // any of that any more.
+        final TransactionConfidence confidence = storedChannel.close.getConfidence();
+        ListenableFuture<Transaction> future = confidence.getDepthFuture(CONFIRMATIONS_FOR_DELETE, Threading.SAME_THREAD);
+        Futures.addCallback(future, new FutureCallback<Transaction>() {
+            @Override
+            public void onSuccess(Transaction result) {
+                deleteChannelFromWallet();
+            }
+
+            @Override
+            public void onFailure(Throwable t) {
+                Throwables.propagate(t);
+            }
+        });
+    }
+
+    private synchronized void deleteChannelFromWallet() {
+        log.info("Close tx has confirmed, deleting channel from wallet: {}", storedChannel);
+        StoredPaymentChannelClientStates channels = (StoredPaymentChannelClientStates)
+                wallet.getExtensions().get(StoredPaymentChannelClientStates.EXTENSION_ID);
+        channels.removeChannel(storedChannel);
+        wallet.addOrUpdateExtension(channels);
+        storedChannel = null;
     }
 
     /**
@@ -157,11 +231,14 @@ public class PaymentChannelClientState {
     /**
      * Creates the initial multisig contract and incomplete refund transaction which can be requested at the appropriate
      * time using {@link PaymentChannelClientState#getIncompleteRefundTransaction} and
-     * {@link PaymentChannelClientState#getMultisigContract()}
+     * {@link PaymentChannelClientState#getMultisigContract()}. The way the contract is crafted can be adjusted by
+     * overriding {@link PaymentChannelClientState#editContractSendRequest(com.google.bitcoin.core.Wallet.SendRequest)}.
+     * By default unconfirmed coins are allowed to be used, as for micropayments the risk should be relatively low.
      *
-     * @throws ValueOutOfRangeException If the value being used cannot be afforded or is too small to be accepted by the network
+     * @throws ValueOutOfRangeException if the value being used is too small to be accepted by the network
+     * @throws InsufficientMoneyException if the wallet doesn't contain enough balance to initiate
      */
-    public synchronized void initiate() throws ValueOutOfRangeException {
+    public synchronized void initiate() throws ValueOutOfRangeException, InsufficientMoneyException {
         final NetworkParameters params = wallet.getParams();
         Transaction template = new Transaction(params);
         // We always place the client key before the server key because, if either side wants some privacy, they can
@@ -174,8 +251,9 @@ public class PaymentChannelClientState {
         if (multisigOutput.getMinNonDustValue().compareTo(totalValue) > 0)
             throw new ValueOutOfRangeException("totalValue too small to use");
         Wallet.SendRequest req = Wallet.SendRequest.forTx(template);
-        if (!wallet.completeTx(req))
-            throw new ValueOutOfRangeException("Cannot afford this channel");
+        req.coinSelector = AllowUnconfirmedCoinSelector.get();
+        editContractSendRequest(req);
+        wallet.completeTx(req);
         BigInteger multisigFee = req.fee;
         multisigContract = req.tx;
         // Build a refund transaction that protects us in the case of a bad server that's just trying to cause havoc
@@ -203,6 +281,14 @@ public class PaymentChannelClientState {
                 refundTx.getHashAsString());
         state = State.INITIATED;
         // Client should now call getIncompleteRefundTransaction() and send it to the server.
+    }
+
+    /**
+     * You can override this method in order to control the construction of the initial contract that creates the
+     * channel. For example if you want it to only use specific coins, you can adjust the coin selector here.
+     * The default implementation does nothing.
+     */
+    protected void editContractSendRequest(Wallet.SendRequest req) {
     }
 
     /**
@@ -254,7 +340,7 @@ public class PaymentChannelClientState {
         TransactionSignature ourSignature =
                 refundTx.calculateSignature(0, myKey, multisigScript, Transaction.SigHash.ALL, false);
         // Insert the signatures.
-        Script scriptSig = ScriptBuilder.createMultiSigInputScript(ImmutableList.of(ourSignature, theirSig));
+        Script scriptSig = ScriptBuilder.createMultiSigInputScript(ourSignature, theirSig);
         log.info("Refund scriptSig: {}", scriptSig);
         log.info("Multi-sig contract scriptPubKey: {}", multisigScript);
         TransactionInput refundInput = refundTx.getInput(0);
@@ -278,11 +364,17 @@ public class PaymentChannelClientState {
      * storage and throwing an {@link IllegalStateException} if it is.
      */
     public synchronized void checkNotExpired() {
-        if (Utils.now().getTime()/1000 > expiryTime) {
+        if (Utils.currentTimeMillis()/1000 > expiryTime) {
             state = State.EXPIRED;
             disconnectFromChannel();
             throw new IllegalStateException("Channel expired");
         }
+    }
+
+    /** Container for a signature and an amount that was sent. */
+    public static class IncrementedPayment {
+        public TransactionSignature signature;
+        public BigInteger amount;
     }
 
     /**
@@ -297,19 +389,23 @@ public class PaymentChannelClientState {
      * {@link PaymentChannelClientState#getValueRefunded()}</p>
      *
      * @param size How many satoshis to increment the payment by (note: not the new total).
-     * @throws ValueOutOfRangeException If size is negative or the new value being returned as change is smaller than
-     *                                  min nondust output size (including if the new total payment is larger than this
-     *                                  channel's totalValue)
+     * @throws ValueOutOfRangeException If size is negative or the channel does not have sufficient money in it to
+     *                                  complete this payment.
      */
-    public synchronized byte[] incrementPaymentBy(BigInteger size) throws ValueOutOfRangeException {
+    public synchronized IncrementedPayment incrementPaymentBy(BigInteger size) throws ValueOutOfRangeException {
         checkState(state == State.READY);
         checkNotExpired();
         checkNotNull(size);  // Validity of size will be checked by makeUnsignedChannelContract.
         if (size.compareTo(BigInteger.ZERO) < 0)
             throw new ValueOutOfRangeException("Tried to decrement payment");
         BigInteger newValueToMe = valueToMe.subtract(size);
-        if (Transaction.MIN_NONDUST_OUTPUT.compareTo(newValueToMe) > 0 && !newValueToMe.equals(BigInteger.ZERO))
-            throw new ValueOutOfRangeException("New value being sent back as change was smaller than minimum nondust output");
+        if (newValueToMe.compareTo(Transaction.MIN_NONDUST_OUTPUT) < 0 && newValueToMe.compareTo(BigInteger.ZERO) > 0) {
+            log.info("New value being sent back as change was smaller than minimum nondust output, sending all");
+            size = valueToMe;
+            newValueToMe = BigInteger.ZERO;
+        }
+        if (newValueToMe.compareTo(BigInteger.ZERO) < 0)
+            throw new ValueOutOfRangeException("Channel has too little money to pay " + size + " satoshis");
         Transaction tx = makeUnsignedChannelContract(newValueToMe);
         log.info("Signing new payment tx {}", tx);
         Transaction.SigHash mode;
@@ -322,7 +418,10 @@ public class PaymentChannelClientState {
         TransactionSignature sig = tx.calculateSignature(0, myKey, multisigScript, mode, true);
         valueToMe = newValueToMe;
         updateChannelInWallet();
-        return sig.encodeToBitcoin();
+        IncrementedPayment payment = new IncrementedPayment();
+        payment.signature = sig;
+        payment.amount = size;
+        return payment;
     }
 
     private synchronized void updateChannelInWallet() {
@@ -346,7 +445,6 @@ public class PaymentChannelClientState {
         synchronized (storedChannel) {
             storedChannel.active = false;
         }
-        storedChannel = null;
     }
 
     /**
@@ -364,6 +462,7 @@ public class PaymentChannelClientState {
     @VisibleForTesting synchronized void doStoreChannelInWallet(Sha256Hash id) {
         StoredPaymentChannelClientStates channels = (StoredPaymentChannelClientStates)
                 wallet.getExtensions().get(StoredPaymentChannelClientStates.EXTENSION_ID);
+        checkNotNull(channels, "You have not added the StoredPaymentChannelClientStates extension to the wallet.");
         checkState(channels.getChannel(id, multisigContract.getHash()) == null);
         storedChannel = new StoredClientChannel(id, multisigContract, refundTx, myKey, valueToMe, refundFees, true);
         channels.putChannel(storedChannel);
@@ -399,7 +498,7 @@ public class PaymentChannelClientState {
     }
 
     /**
-     * Returns the fees that will be paid if the refund transaction has to be claimed because the server failed to close
+     * Returns the fees that will be paid if the refund transaction has to be claimed because the server failed to settle
      * the channel properly. May only be called after {@link PaymentChannelClientState#initiate()}
      */
     public synchronized BigInteger getRefundTxFees() {
@@ -430,5 +529,12 @@ public class PaymentChannelClientState {
     public synchronized BigInteger getValueRefunded() {
         checkState(state == State.READY);
         return valueToMe;
+    }
+
+    /**
+     * Returns the amount of money sent on this channel so far.
+     */
+    public synchronized BigInteger getValueSpent() {
+        return getTotalValue().subtract(getValueRefunded());
     }
 }

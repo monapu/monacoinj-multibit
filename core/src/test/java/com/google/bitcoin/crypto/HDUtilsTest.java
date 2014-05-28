@@ -1,5 +1,9 @@
 package com.google.bitcoin.crypto;
 
+<<<<<<< HEAD
+=======
+import com.google.bitcoin.core.ECKey;
+>>>>>>> bitcoinj-multibit/bcj-0.11.1-mb-alice
 import org.junit.Assert;
 import org.junit.Test;
 import org.slf4j.Logger;
@@ -104,7 +108,7 @@ public class HDUtilsTest {
         };
 
         for (int i = 0; i < tv.length; i += 3) {
-            Assert.assertArrayEquals("Case " + i, getBytes(tv, i + 2), HDUtils.hmacSha256(getBytes(tv, i), getBytes(tv, i + 1)));
+            Assert.assertArrayEquals("Case " + i, getBytes(tv, i + 2), HDUtils.hmacSha512(getBytes(tv, i), getBytes(tv, i + 1)));
         }
     }
 
@@ -119,14 +123,14 @@ public class HDUtilsTest {
                 "04ed83704c95d829046f1ac27806211132102c34e9ac7ffa1b71110658e5b9d1bdedc416f5cefc1db0625cd0c75de8192d2b592d7e3b00bcfb4a0e860d880fd1fc",
                 "042596957532fc37e40486b910802ff45eeaa924548c0e1c080ef804e523ec3ed3ed0a9004acf927666eee18b7f5e8ad72ff100a3bb710a577256fd7ec81eb1cb3");
 
-        ECDomainParameters ecp = HDUtils.getEcParams();
+        ECDomainParameters ecp = ECKey.CURVE;
         ECCurve curve = ecp.getCurve();
 
         for (String testpkStr : testPubKey) {
             byte[] testpk = Hex.decode(testpkStr);
 
-            BigInteger pubX = HDUtils.toBigInteger(Arrays.copyOfRange(testpk, 1, 33));
-            BigInteger pubY = HDUtils.toBigInteger(Arrays.copyOfRange(testpk, 33, 65));
+            BigInteger pubX = new BigInteger(1, Arrays.copyOfRange(testpk, 1, 33));
+            BigInteger pubY = new BigInteger(1, Arrays.copyOfRange(testpk, 33, 65));
 
             ECPoint ptFlat = curve.createPoint(pubX, pubY, false); // 65
             ECPoint ptComp = curve.createPoint(pubX, pubY, true);  // 33

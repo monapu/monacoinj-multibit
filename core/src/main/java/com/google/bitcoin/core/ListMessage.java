@@ -99,6 +99,9 @@ public abstract class ListMessage extends Message {
                 case 2:
                     type = InventoryItem.Type.Block;
                     break;
+                case 3:
+                    type = InventoryItem.Type.FilteredBlock;
+                    break;
                 default:
                     throw new ProtocolException("Unknown CInv type: " + typeCode);
             }
@@ -117,5 +120,11 @@ public abstract class ListMessage extends Message {
             // And now the hash.
             stream.write(Utils.reverseBytes(i.hash.getBytes()));
         }
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        return o.getClass() == this.getClass() &&
+                ((ListMessage)o).items.equals(this.items);
     }
 }

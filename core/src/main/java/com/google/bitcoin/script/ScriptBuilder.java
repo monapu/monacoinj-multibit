@@ -64,14 +64,23 @@ public class ScriptBuilder {
 
     /** Creates a scriptPubKey that encodes payment to the given address. */
     public static Script createOutputScript(Address to) {
-        // OP_DUP OP_HASH160 <pubKeyHash> OP_EQUALVERIFY OP_CHECKSIG
-        return new ScriptBuilder()
+        if (to.isP2SHAddress()) {
+            // OP_HASH160 <scriptHash> OP_EQUAL
+            return new ScriptBuilder()
+                .op(OP_HASH160)
+                .data(to.getHash160())
+                .op(OP_EQUAL)
+                .build();
+        } else {
+            // OP_DUP OP_HASH160 <pubKeyHash> OP_EQUALVERIFY OP_CHECKSIG
+            return new ScriptBuilder()
                 .op(OP_DUP)
                 .op(OP_HASH160)
                 .data(to.getHash160())
                 .op(OP_EQUALVERIFY)
                 .op(OP_CHECKSIG)
                 .build();
+        }
     }
 
     /** Creates a scriptPubKey that encodes payment to the given raw public key. */
@@ -113,6 +122,11 @@ public class ScriptBuilder {
         return createMultiSigInputScriptBytes(sigs);
     }
 
+    /** Create a program that satisfies an OP_CHECKMULTISIG program. */
+    public static Script createMultiSigInputScript(TransactionSignature... signatures) {
+        return createMultiSigInputScript(Arrays.asList(signatures));
+    }
+
     /** Create a program that satisfies an OP_CHECKMULTISIG program, using pre-encoded signatures. */
     public static Script createMultiSigInputScriptBytes(List<byte[]> signatures) {
         checkArgument(signatures.size() <= 16);
@@ -121,5 +135,15 @@ public class ScriptBuilder {
         for (byte[] signature : signatures)
             builder.data(signature);
         return builder.build();
+    }
+
+    /**
+     * Creates a scriptPubKey that sends to the given script hash. Read
+     * <a href="https://github.com/bitcoin/bips/blob/master/bip-0016.mediawiki">BIP 16</a> to learn more about this
+     * kind of script.
+     */
+    public static Script createP2SHOutputScript(byte[] hash) {
+        checkArgument(hash.length == 20);
+        return new ScriptBuilder().op(OP_HASH160).data(hash).op(OP_EQUAL).build();
     }
 }

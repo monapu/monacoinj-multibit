@@ -48,6 +48,17 @@ public class TransactionSignature extends ECKey.ECDSASignature {
         setSigHash(mode, anyoneCanPay);
     }
 
+    /**
+     * Returns a dummy invalid signature whose R/S values are set such that they will take up the same number of
+     * encoded bytes as a real signature. This can be useful when you want to fill out a transaction to be of the
+     * right size (e.g. for fee calculations) but don't have the requisite signing key yet and will fill out the
+     * real signature later.
+     */
+    public static TransactionSignature dummy() {
+        BigInteger val = ECKey.HALF_CURVE_ORDER;
+        return new TransactionSignature(val, val);
+    }
+
     /** Calculates the byte used in the protocol to represent the combination of mode and anyoneCanPay. */
     public static int calcSigHashValue(Transaction.SigHash mode, boolean anyoneCanPay) {
         int sighashFlags = mode.ordinal() + 1;
@@ -145,9 +156,12 @@ public class TransactionSignature extends ECKey.ECDSASignature {
         // Bitcoin encoding is DER signature + sighash byte.
         if (requireCanonical && !isEncodingCanonical(bytes))
             throw new VerificationException("Signature encoding is not canonical.");
-        ECKey.ECDSASignature sig = ECKey.ECDSASignature.decodeFromDER(bytes);
-        if (sig == null)
-            throw new VerificationException("Could not decode DER component.");
+        ECKey.ECDSASignature sig;
+        try {
+            sig = ECKey.ECDSASignature.decodeFromDER(bytes);
+        } catch (IllegalArgumentException e) {
+            throw new VerificationException("Could not decode DER", e);
+        }
         TransactionSignature tsig = new TransactionSignature(sig.r, sig.s);
         // In Bitcoin, any value of the final byte is valid, but not necessarily canonical. See javadocs for
         // isEncodingCanonical to learn more about this.

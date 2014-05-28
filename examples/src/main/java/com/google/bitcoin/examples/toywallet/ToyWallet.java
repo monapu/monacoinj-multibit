@@ -17,7 +17,7 @@
 package com.google.bitcoin.examples.toywallet;
 
 import com.google.bitcoin.core.*;
-import com.google.bitcoin.discovery.DnsDiscovery;
+import com.google.bitcoin.net.discovery.DnsDiscovery;
 import com.google.bitcoin.params.MainNetParams;
 import com.google.bitcoin.params.TestNet3Params;
 import com.google.bitcoin.store.H2FullPrunedBlockStore;

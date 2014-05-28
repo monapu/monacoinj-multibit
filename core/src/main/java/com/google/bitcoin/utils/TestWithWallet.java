@@ -21,12 +21,14 @@ import com.google.bitcoin.params.UnitTestParams;
 import com.google.bitcoin.store.BlockStore;
 import com.google.bitcoin.store.MemoryBlockStore;
 
+import javax.annotation.Nullable;
 import java.io.IOException;
 import java.math.BigInteger;
-import java.util.ArrayList;
 
 import static com.google.bitcoin.utils.TestUtils.createFakeBlock;
 import static com.google.bitcoin.utils.TestUtils.createFakeTx;
+
+// TODO: This needs to be somewhat rewritten - the "sendMoneyToWallet" methods aren't sending via the block chain object
 
 /**
  * A utility class that you can derive from in your unit tests. TestWithWallet sets up a wallet with a key,
@@ -59,33 +61,39 @@ public class TestWithWallet {
         Wallet.SendRequest.DEFAULT_FEE_PER_KB = Transaction.REFERENCE_DEFAULT_MIN_TX_FEE;
     }
 
+    @Nullable
     protected Transaction sendMoneyToWallet(Wallet wallet, Transaction tx, AbstractBlockChain.NewBlockType type)
             throws IOException, VerificationException {
         if (type == null) {
             // Pending/broadcast tx.
             if (wallet.isPendingTransactionRelevant(tx))
-                wallet.receivePending(tx, new ArrayList<Transaction>());
+                wallet.receivePending(tx, null);
         } else {
             TestUtils.BlockPair bp = createFakeBlock(blockStore, tx);
             wallet.receiveFromBlock(tx, bp.storedBlock, type, 0);
             if (type == AbstractBlockChain.NewBlockType.BEST_CHAIN)
                 wallet.notifyNewBestBlock(bp.storedBlock);
         }
-        return tx;
+        return wallet.getTransaction(tx.getHash());  // Can be null if tx is a double spend that's otherwise irrelevant.
     }
 
-    protected Transaction sendMoneyToWallet(Transaction tx, AbstractBlockChain.NewBlockType type) throws IOException,
-            ProtocolException, VerificationException {
+    @Nullable
+    protected Transaction sendMoneyToWallet(Transaction tx, AbstractBlockChain.NewBlockType type) throws IOException, VerificationException {
         return sendMoneyToWallet(this.wallet, tx, type);
     }
 
-    protected Transaction sendMoneyToWallet(Wallet wallet, BigInteger value, Address toAddress, AbstractBlockChain.NewBlockType type)
-            throws IOException, ProtocolException, VerificationException {
+    @Nullable
+    protected Transaction sendMoneyToWallet(Wallet wallet, BigInteger value, Address toAddress, AbstractBlockChain.NewBlockType type) throws IOException, VerificationException {
         return sendMoneyToWallet(wallet, createFakeTx(params, value, toAddress), type);
     }
 
-    protected Transaction sendMoneyToWallet(BigInteger value, AbstractBlockChain.NewBlockType type) throws IOException,
-            ProtocolException, VerificationException {
+    @Nullable
+    protected Transaction sendMoneyToWallet(Wallet wallet, BigInteger value, ECKey toPubKey, AbstractBlockChain.NewBlockType type) throws IOException, VerificationException {
+        return sendMoneyToWallet(wallet, createFakeTx(params, value, toPubKey), type);
+    }
+
+    @Nullable
+    protected Transaction sendMoneyToWallet(BigInteger value, AbstractBlockChain.NewBlockType type) throws IOException,  VerificationException {
         return sendMoneyToWallet(this.wallet, createFakeTx(params, value, myAddress), type);
     }
 }

@@ -20,6 +20,7 @@ import com.google.bitcoin.core.Utils;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.util.Arrays;
 
 import static com.google.bitcoin.script.ScriptOpCodes.OP_PUSHDATA1;
 import static com.google.bitcoin.script.ScriptOpCodes.OP_PUSHDATA2;
@@ -31,7 +32,7 @@ import static com.google.common.base.Preconditions.checkState;
  */
 public class ScriptChunk {
     private boolean isOpCode;
-    public byte[] data;
+    public final byte[] data;
     private int startLocationInProgram;
 
     public ScriptChunk(boolean isOpCode, byte[] data) {
@@ -48,6 +49,9 @@ public class ScriptChunk {
         return isOpCode && data.length == 1 && (0xFF & data[0]) == opCode;
     }
 
+    /**
+     * If this chunk is a single byte of non-pushdata content (could be OP_RESERVED or some invalid Opcode)
+     */
     public boolean isOpCode() {
         return isOpCode;
     }
@@ -78,5 +82,27 @@ public class ScriptChunk {
             }
             stream.write(data);
         }
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+
+        ScriptChunk chunk = (ScriptChunk) o;
+
+        if (isOpCode != chunk.isOpCode) return false;
+        if (startLocationInProgram != chunk.startLocationInProgram) return false;
+        if (!Arrays.equals(data, chunk.data)) return false;
+
+        return true;
+    }
+
+    @Override
+    public int hashCode() {
+        int result = (isOpCode ? 1 : 0);
+        result = 31 * result + (data != null ? Arrays.hashCode(data) : 0);
+        result = 31 * result + startLocationInProgram;
+        return result;
     }
 }

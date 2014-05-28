@@ -16,15 +16,13 @@
 
 package com.google.bitcoin.core;
 
-import com.google.bitcoin.params.MainNetParams;
-import com.google.bitcoin.params.TestNet2Params;
-import com.google.bitcoin.params.TestNet3Params;
-import com.google.bitcoin.params.UnitTestParams;
+import com.google.bitcoin.params.*;
 import com.google.bitcoin.script.Script;
 import com.google.bitcoin.script.ScriptOpCodes;
 import com.google.common.base.Objects;
 import org.spongycastle.util.encoders.Hex;
 
+import javax.annotation.Nullable;
 import java.io.ByteArrayOutputStream;
 import java.io.Serializable;
 import java.math.BigInteger;
@@ -61,6 +59,11 @@ public abstract class NetworkParameters implements Serializable {
     /** Unit test network. */
     public static final String ID_UNITTESTNET = "com.google.bitcoin.unittest";
 
+    /** The string used by the payment protocol to represent the main net. */
+    public static final String PAYMENT_PROTOCOL_ID_MAINNET = "main";
+    /** The string used by the payment protocol to represent the test net. */
+    public static final String PAYMENT_PROTOCOL_ID_TESTNET = "test";
+
     // TODO: Seed nodes should be here as well.
 
     protected Block genesisBlock;
@@ -68,6 +71,7 @@ public abstract class NetworkParameters implements Serializable {
     protected int port;
     protected long packetMagic;
     protected int addressHeader;
+    protected int p2shHeader;
     protected int dumpedPrivateKeyHeader;
     protected int interval;
     protected int digishieldInterval;
@@ -174,12 +178,20 @@ public abstract class NetworkParameters implements Serializable {
         return UnitTestParams.get();
     }
 
+    /** Returns a standard regression test params (similar to unitTests) */
+    @Deprecated
+    public static NetworkParameters regTests() {
+        return RegTestParams.get();
+    }
+
     /**
      * A Java package style string acting as unique ID for these parameters
      */
     public String getId() {
         return id;
     }
+
+    public abstract String getPaymentProtocolId();
 
     @Override
     public boolean equals(Object other) {
@@ -194,6 +206,7 @@ public abstract class NetworkParameters implements Serializable {
     }
 
     /** Returns the network parameters for the given string ID or NULL if not recognized. */
+    @Nullable
     public static NetworkParameters fromID(String id) {
         if (id.equals(ID_MAINNET)) {
             return MainNetParams.get();
@@ -201,6 +214,18 @@ public abstract class NetworkParameters implements Serializable {
             return TestNet3Params.get();
         } else if (id.equals(ID_UNITTESTNET)) {
             return UnitTestParams.get();
+        } else {
+            return null;
+        }
+    }
+
+    /** Returns the network parameters for the given string paymentProtocolID or NULL if not recognized. */
+    @Nullable
+    public static NetworkParameters fromPmtProtocolID(String pmtProtocolId) {
+        if (pmtProtocolId.equals(PAYMENT_PROTOCOL_ID_MAINNET)) {
+            return MainNetParams.get();
+        } else if (pmtProtocolId.equals(PAYMENT_PROTOCOL_ID_TESTNET)) {
+            return TestNet3Params.get();
         } else {
             return null;
         }
@@ -267,6 +292,13 @@ public abstract class NetworkParameters implements Serializable {
      */
     public int getAddressHeader() {
         return addressHeader;
+    }
+
+    /**
+     * First byte of a base58 encoded P2SH address.  P2SH addresses are defined as part of BIP0013.
+     */
+    public int getP2SHHeader() {
+        return p2shHeader;
     }
 
     /** First byte of a base58 encoded dumped private key. See {@link com.google.bitcoin.core.DumpedPrivateKey}. */

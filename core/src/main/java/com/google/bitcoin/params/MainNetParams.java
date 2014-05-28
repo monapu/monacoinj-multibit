@@ -37,6 +37,7 @@ public class MainNetParams extends NetworkParameters {
         proofOfWorkLimit = Utils.decodeCompactBits(0x1e0fffffL);
         dumpedPrivateKeyHeader = 178; //This is always addressHeader + 128
         addressHeader = 50;
+        p2shHeader = 5; // monacoin-qt のp2sh headerはbitcoinから変更されてないように見える
         acceptableAddressCodes = new int[] { addressHeader };
         port = 9401;
         packetMagic = 0xfbc0b6db;
@@ -73,5 +74,9 @@ public class MainNetParams extends NetworkParameters {
             instance = new MainNetParams();
         }
         return instance;
+    }
+
+    public String getPaymentProtocolId() {
+        return PAYMENT_PROTOCOL_ID_MAINNET;
     }
 }

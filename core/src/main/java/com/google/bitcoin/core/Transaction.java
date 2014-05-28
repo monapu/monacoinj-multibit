@@ -36,6 +36,7 @@ import java.text.SimpleDateFormat;
 import java.util.*;
 
 import static com.google.bitcoin.core.Utils.*;
+import static com.google.common.base.Preconditions.*;
 
 /**
  * <p>A transaction represents the movement of coins from some addresses to some other addresses. It can also represent
@@ -54,7 +55,7 @@ import static com.google.bitcoin.core.Utils.*;
 public class Transaction extends ChildMessage implements Serializable, IsMultiBitClass {
     private static final Logger log = LoggerFactory.getLogger(Transaction.class);
     private static final long serialVersionUID = -8567546957352643140L;
-    
+
     /** Threshold for lockTime: below this value it is interpreted as block number, otherwise as timestamp. **/
     public static final int LOCKTIME_THRESHOLD = 500000000; // Tue Nov  5 00:53:20 1985 UTC
 
@@ -89,7 +90,7 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
 
     // This is an in memory helper only.
     private transient Sha256Hash hash;
-    
+
     // Data about how confirmed this tx is. Serialized, may be null. 
     private TransactionConfidence confidence;
 
@@ -101,7 +102,7 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
     //
     // If this transaction is not stored in the wallet, appearsInHashes is null.
     private Map<Sha256Hash, Integer> appearsInHashes;
-    
+
     // Transactions can be encoded in a way that will use more bytes than is optimal
     // (due to VarInts having multiple encodings)
     // MAX_BLOCK_SIZE must be compared to the optimal encoding, not the actual encoding, so when parsing, we keep track
@@ -173,7 +174,7 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
      * as the length will be provided as part of the header.  If unknown then set to Message.UNKNOWN_LENGTH
      * @throws ProtocolException
      */
-    public Transaction(NetworkParameters params, byte[] msg, int offset, Message parent, boolean parseLazy, boolean parseRetain, int length)
+    public Transaction(NetworkParameters params, byte[] msg, int offset, @Nullable Message parent, boolean parseLazy, boolean parseRetain, int length)
             throws ProtocolException {
         super(params, msg, offset, parent, parseLazy, parseRetain, length);
     }
@@ -181,7 +182,7 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
     /**
      * Creates a transaction by reading payload starting from offset bytes in. Length of a transaction is fixed.
      */
-    public Transaction(NetworkParameters params, byte[] msg, Message parent, boolean parseLazy, boolean parseRetain, int length)
+    public Transaction(NetworkParameters params, byte[] msg, @Nullable Message parent, boolean parseLazy, boolean parseRetain, int length)
             throws ProtocolException {
         super(params, msg, 0, parent, parseLazy, parseRetain, length);
     }
@@ -220,13 +221,13 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
         // This is tested in WalletTest.
         BigInteger v = BigInteger.ZERO;
         for (TransactionOutput o : outputs) {
-            if (!o.isMine(wallet)) continue;
+            if (!o.isMineOrWatched(wallet)) continue;
             if (!includeSpent && !o.isAvailableForSpending()) continue;
             v = v.add(o.getValue());
         }
         return v;
     }
-    
+
     /*
      * If isSpent - check that all my outputs spent, otherwise check that there at least
      * one unspent.
@@ -235,7 +236,7 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
         boolean isActuallySpent = true;
         for (TransactionOutput o : outputs) {
             if (o.isAvailableForSpending()) {
-                if (o.isMine(wallet)) isActuallySpent = false;
+                if (o.isMineOrWatched(wallet)) isActuallySpent = false;
                 if (o.getSpentBy() != null) {
                     log.error("isAvailableForSpending != spentBy");
                     return false;
@@ -341,7 +342,7 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
                 continue;
             // The connected output may be the change to the sender of a previous input sent to this wallet. In this
             // case we ignore it.
-            if (!connected.isMine(wallet))
+            if (!connected.isMineOrWatched(wallet))
                 continue;
             v = v.add(connected.getValue());
         }
@@ -365,29 +366,6 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
     }
 
     /**
-     * Connects all inputs using the provided transactions. If any input cannot be connected returns that input or
-     * null on success.
-     */
-    TransactionInput connectForReorganize(Map<Sha256Hash, Transaction> transactions) {
-        maybeParse();
-        for (TransactionInput input : inputs) {
-            // Coinbase transactions, by definition, do not have connectable inputs.
-            if (input.isCoinBase()) continue;
-            TransactionInput.ConnectionResult result =
-                    input.connect(transactions, TransactionInput.ConnectMode.ABORT_ON_CONFLICT);
-            // Connected to another tx in the wallet?
-            if (result == TransactionInput.ConnectionResult.SUCCESS)
-                continue;
-            // The input doesn't exist in the wallet, eg because it belongs to somebody else (inbound spend).
-            if (result == TransactionInput.ConnectionResult.NO_SUCH_TX)
-                continue;
-            // Could not connect this input, so return it and abort.
-            return input;
-        }
-        return null;
-    }
-
-    /**
      * Returns true if every output is marked as spent.
      */
     public boolean isEveryOutputSpent() {
@@ -400,13 +378,25 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
     }
 
     /**
+     * Returns true if any of the outputs is marked as spent.
+     */
+    public boolean isAnyOutputSpent() {
+        maybeParse();
+        for (TransactionOutput output : outputs) {
+            if (!output.isAvailableForSpending())
+                return true;
+        }
+        return false;
+    }
+
+    /**
      * Returns false if this transaction has at least one output that is owned by the given wallet and unspent, true
      * otherwise.
      */
     public boolean isEveryOwnedOutputSpent(Wallet wallet) {
         maybeParse();
         for (TransactionOutput output : outputs) {
-            if (output.isAvailableForSpending() && output.isMine(wallet))
+            if (output.isAvailableForSpending() && output.isMineOrWatched(wallet))
                 return false;
         }
         return true;
@@ -423,7 +413,7 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
         }
         return updatedAt;
     }
-    
+
     public void setUpdateTime(Date updatedAt) {
         this.updatedAt = updatedAt;
     }
@@ -542,7 +532,7 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
         optimalEncodingMessageSize += 4;
         length = cursor - offset;
     }
-    
+
     public int getOptimalEncodingMessageSize() {
         if (optimalEncodingMessageSize != 0)
             return optimalEncodingMessageSize;
@@ -585,9 +575,9 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
      * A human readable version of the transaction useful for debugging. The format is not guaranteed to be stable.
      * @param chain If provided, will be used to estimate lock times (if set). Can be null.
      */
-    public String toString(AbstractBlockChain chain) {
+    public String toString(@Nullable AbstractBlockChain chain) {
         // Basic info about the tx.
-        StringBuffer s = new StringBuffer();
+        StringBuilder s = new StringBuilder();
         s.append(String.format("  %s: %s%n", getHashAsString(), getConfidence()));
         if (isTimeLocked()) {
             String time;
@@ -621,18 +611,11 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
         }
         for (TransactionInput in : inputs) {
             s.append("     ");
-            s.append("from ");
+            s.append("in   ");
 
             try {
                 Script scriptSig = in.getScriptSig();
-                if (scriptSig.getChunks().size() == 2)
-                    s.append(scriptSig.getFromAddress(params).toString());
-                else if (scriptSig.getChunks().size() == 1) {
-                    s.append("[sig:");
-                    s.append(bytesToHexString(scriptSig.getChunks().get(0).data));
-                    s.append("]");
-                } else
-                    s.append(scriptSig);
+                s.append(scriptSig);
                 s.append(" / ");
                 s.append(in.getOutpoint().toString());
             } catch (Exception e) {
@@ -641,19 +624,11 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
             s.append(String.format("%n"));
         }
         for (TransactionOutput out : outputs) {
-            s.append("       ");
-            s.append("to ");
+            s.append("     ");
+            s.append("out  ");
             try {
                 Script scriptPubKey = out.getScriptPubKey();
-                if (scriptPubKey.isSentToAddress()) {
-                    s.append(scriptPubKey.getToAddress(params).toString());
-                } else if (scriptPubKey.isSentToRawPubKey()) {
-                    s.append("[pubkey:");
-                    s.append(bytesToHexString(scriptPubKey.getPubKey()));
-                    s.append("]");
-                } else {
-                    s.append(scriptPubKey);
-                }
+                s.append(scriptPubKey);
                 s.append(" ");
                 s.append(bitcoinValueToPlainString(out.getValue()));
                 s.append(" MONA");
@@ -705,6 +680,38 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
         inputs.add(input);
         adjustLength(inputs.size(), input.length);
         return input;
+    }
+
+    /**
+     * Adds a new and fully signed input for the given parameters. Note that this method is <b>not</b> thread safe
+     * and requires external synchronization. Please refer to general documentation on Bitcoin scripting and contracts
+     * to understand the values of sigHash and anyoneCanPay: otherwise you can use the other form of this method
+     * that sets them to typical defaults.
+     *
+     * @throws ScriptException if the scriptPubKey is not a pay to address or pay to pubkey script.
+     */
+    public TransactionInput addSignedInput(TransactionOutPoint prevOut, Script scriptPubKey, ECKey sigKey,
+                                           SigHash sigHash, boolean anyoneCanPay) throws ScriptException {
+        TransactionInput input = new TransactionInput(params, this, new byte[]{}, prevOut);
+        addInput(input);
+        Sha256Hash hash = hashForSignature(inputs.size() - 1, scriptPubKey, sigHash, anyoneCanPay);
+        ECKey.ECDSASignature ecSig = sigKey.sign(hash);
+        TransactionSignature txSig = new TransactionSignature(ecSig, sigHash, anyoneCanPay);
+        if (scriptPubKey.isSentToRawPubKey())
+            input.setScriptSig(ScriptBuilder.createInputScript(txSig));
+        else if (scriptPubKey.isSentToAddress())
+            input.setScriptSig(ScriptBuilder.createInputScript(txSig, sigKey));
+        else
+            throw new ScriptException("Don't know how to sign for this kind of scriptPubKey: " + scriptPubKey);
+        return input;
+    }
+
+    /**
+     * Same as {@link #addSignedInput(TransactionOutPoint, com.google.bitcoin.script.Script, ECKey, com.google.bitcoin.core.Transaction.SigHash, boolean)}
+     * but defaults to {@link SigHash#ALL} and "false" for the anyoneCanPay flag. This is normally what you want.
+     */
+    public TransactionInput addSignedInput(TransactionOutPoint prevOut, Script scriptPubKey, ECKey sigKey) throws ScriptException {
+        return addSignedInput(prevOut, scriptPubKey, sigKey, SigHash.ALL, false);
     }
 
     /**
@@ -778,13 +785,12 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
      * @param wallet  A wallet is required to fetch the keys needed for signing.
      * @param aesKey The AES key to use to decrypt the key before signing. Null if no decryption is required.
      */
-    public synchronized void signInputs(SigHash hashType, Wallet wallet, KeyParameter aesKey) throws ScriptException {
-        // TODO: This should be a method of the TransactionInput that (possibly?) operates with a copy of this object.
-        Preconditions.checkState(inputs.size() > 0);
-        Preconditions.checkState(outputs.size() > 0);
+    public synchronized void signInputs(SigHash hashType, Wallet wallet, @Nullable KeyParameter aesKey) throws ScriptException {
+        checkState(inputs.size() > 0);
+        checkState(outputs.size() > 0);
 
         // I don't currently have an easy way to test other modes work, as the official client does not use them.
-        Preconditions.checkArgument(hashType == SigHash.ALL, "Only SIGHASH_ALL is currently supported");
+        checkArgument(hashType == SigHash.ALL, "Only SIGHASH_ALL is currently supported");
 
         // The transaction is signed with the input scripts empty except for the input we are signing. In the case
         // where addInput has been used to set up a new transaction, they are already all empty. The input being signed
@@ -817,14 +823,20 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
             // Find the signing key we'll need to use.
             ECKey key = input.getOutpoint().getConnectedKey(wallet);
             // This assert should never fire. If it does, it means the wallet is inconsistent.
-            Preconditions.checkNotNull(key, "Transaction exists in wallet that we cannot redeem: %s",
-                                       input.getOutpoint().getHash());
+            checkNotNull(key, "Transaction exists in wallet that we cannot redeem: %s", input.getOutpoint().getHash());
             // Keep the key around for the script creation step below.
             signingKeys[i] = key;
             // The anyoneCanPay feature isn't used at the moment.
             boolean anyoneCanPay = false;
             byte[] connectedPubKeyScript = input.getOutpoint().getConnectedPubKeyScript();
-            signatures[i] = calculateSignature(i, key, aesKey, connectedPubKeyScript, hashType, anyoneCanPay);
+            if (key.hasPrivKey() || key.isEncrypted()) {
+                signatures[i] = calculateSignature(i, key, aesKey, connectedPubKeyScript, hashType, anyoneCanPay);
+            } else {
+                // Create a dummy signature to ensure the transaction is of the correct size when we try to ensure
+                // the right fee-per-kb is attached. If the wallet doesn't have the privkey, the user is assumed to
+                // be doing something special and that they will replace the dummy signature with a real one later.
+                signatures[i] = TransactionSignature.dummy();
+            }
         }
 
         // Now we have calculated each signature, go through and create the scripts. Reminder: the script consists:
@@ -836,7 +848,9 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
             if (signatures[i] == null)
                 continue;
             TransactionInput input = inputs.get(i);
-            Script scriptPubKey = input.getOutpoint().getConnectedOutput().getScriptPubKey();
+            final TransactionOutput connectedOutput = input.getOutpoint().getConnectedOutput();
+            checkNotNull(connectedOutput);  // Quiet static analysis: is never null here but cannot be statically proven
+            Script scriptPubKey = connectedOutput.getScriptPubKey();
             if (scriptPubKey.isSentToAddress()) {
                 input.setScriptSig(ScriptBuilder.createInputScript(signatures[i], signingKeys[i]));
             } else if (scriptPubKey.isSentToRawPubKey()) {
@@ -865,7 +879,7 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
      * @param anyoneCanPay Signing mode, see the SigHash enum for documentation.
      * @return A newly calculated signature object that wraps the r, s and sighash components.
      */
-    public synchronized  TransactionSignature calculateSignature(int inputIndex, ECKey key, KeyParameter aesKey,
+    public synchronized  TransactionSignature calculateSignature(int inputIndex, ECKey key, @Nullable KeyParameter aesKey,
                                                                  byte[] connectedPubKeyScript,
                                                                  SigHash hashType, boolean anyoneCanPay) {
         Sha256Hash hash = hashForSignature(inputIndex, connectedPubKeyScript, hashType, anyoneCanPay);
@@ -958,13 +972,13 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
             // ever put into scripts. Deleting OP_CODESEPARATOR is a step that should never be required but if we don't
             // do it, we could split off the main chain.
             connectedScript = Script.removeAllInstancesOfOp(connectedScript, ScriptOpCodes.OP_CODESEPARATOR);
-            
+
             // Set the input to the script of its output. Satoshi does this but the step has no obvious purpose as
             // the signature covers the hash of the prevout transaction which obviously includes the output script
             // already. Perhaps it felt safer to him in some way, or is another leftover from how the code was written.
             TransactionInput input = inputs.get(inputIndex);
             input.setScriptBytes(connectedScript);
-            
+
             ArrayList<TransactionOutput> outputs = this.outputs;
             if ((sigHashType & 0x1f) == (SigHash.NONE.ordinal() + 1)) {
                 // SIGHASH_NONE means no outputs are signed at all - the signature is effectively for a "blank cheque".
@@ -1003,7 +1017,7 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
                     if (i != inputIndex)
                         inputs.get(i).setSequenceNumber(0);
             }
-            
+
             ArrayList<TransactionInput> inputs = this.inputs;
             if ((sigHashType & SIGHASH_ANYONECANPAY_VALUE) == SIGHASH_ANYONECANPAY_VALUE) {
                 // SIGHASH_ANYONECANPAY means the signature in the input is not broken by changes/additions/removals
@@ -1211,7 +1225,7 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
             throw new VerificationException("Transaction had no inputs or no outputs.");
         if (this.getMessageSize() > Block.MAX_BLOCK_SIZE)
             throw new VerificationException("Transaction larger than MAX_BLOCK_SIZE");
-        
+
         BigInteger valueOut = BigInteger.ZERO;
         for (TransactionOutput output : outputs) {
             if (output.getValue().compareTo(BigInteger.ZERO) < 0)
@@ -1220,7 +1234,7 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
         }
         if (valueOut.compareTo(params.MAX_MONEY) > 0)
             throw new VerificationException("Total transaction output value greater than possible");
-        
+
         if (isCoinBase()) {
             if (inputs.get(0).getScriptBytes().length < 2 || inputs.get(0).getScriptBytes().length > 100)
                 throw new VerificationException("Coinbase script size out of range");
@@ -1290,7 +1304,7 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
 
     /**
      * Make the TransactionOutputs spendable This is used in an intrawallet
-     * transfer as what is spent from the senders's perspetive is avaiable to
+     * transfer as what is spent from the senders's perspetive is available to
      * spend from the recipients.
      */
     public void markOutputsAsSpendable() {
