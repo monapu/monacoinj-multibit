@@ -205,9 +205,14 @@ public class TransactionOutput extends ChildMessage implements Serializable, IsM
         // formula is wrong for anything that's not a pay-to-address output, unfortunately, we must follow the reference
         // clients wrongness in order to ensure we're considered standard. A better formula would either estimate the
         // size of data needed to satisfy all different script types, or just hard code 33 below.
+
+        return BigInteger.ZERO; // monacoin-qt's CTxOut::IsDust() is always false.
+        /*
         final BigInteger size = BigInteger.valueOf(this.bitcoinSerialize().length + 148);
         BigInteger[] nonDustAndRemainder = feePerKbRequired.multiply(size).divideAndRemainder(BigInteger.valueOf(1000));
         return nonDustAndRemainder[1].equals(BigInteger.ZERO) ? nonDustAndRemainder[0] : nonDustAndRemainder[0].add(BigInteger.ONE);
+        */
+
     }
 
     /**
