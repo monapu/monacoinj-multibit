@@ -6,6 +6,7 @@ import com.google.monacoin.store.BlockStore;
 import com.google.monacoin.store.MemoryBlockStore;
 import com.google.monacoin.utils.BriefLogFormatter;
 import com.google.monacoin.utils.Threading;
+import com.google.monacoin.net.discovery.SeedPeers;
 
 import java.io.DataOutputStream;
 import java.io.FileInputStream;
@@ -36,7 +37,15 @@ public class BuildCheckpoints {
         final BlockStore store = new MemoryBlockStore(params);
         final BlockChain chain = new BlockChain(params, store);
         final PeerGroup peerGroup = new PeerGroup(params, chain);
-        peerGroup.addAddress(InetAddress.getLocalHost());
+        if(args.length == 0){
+            // peerGroup.addAddress(InetAddress.getLocalHost());
+            peerGroup.addPeerDiscovery(new SeedPeers(params));
+        } else {
+            for(String host:args){
+                peerGroup.addAddress( InetAddress.getByName( host ));
+            }
+        }
+        
         long now = new Date().getTime() / 1000;
         peerGroup.setFastCatchupTimeSecs(now);
 
