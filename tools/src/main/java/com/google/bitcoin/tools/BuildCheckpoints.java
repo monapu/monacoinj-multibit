@@ -6,6 +6,7 @@ import com.google.bitcoin.store.BlockStore;
 import com.google.bitcoin.store.MemoryBlockStore;
 import com.google.bitcoin.utils.BriefLogFormatter;
 import com.google.bitcoin.utils.Threading;
+import com.google.bitcoin.net.discovery.SeedPeers;
 
 import java.io.DataOutputStream;
 import java.io.FileInputStream;
@@ -36,7 +37,15 @@ public class BuildCheckpoints {
         final BlockStore store = new MemoryBlockStore(params);
         final BlockChain chain = new BlockChain(params, store);
         final PeerGroup peerGroup = new PeerGroup(params, chain);
-        peerGroup.addAddress(InetAddress.getLocalHost());
+        if(args.length == 0){
+            // peerGroup.addAddress(InetAddress.getLocalHost());
+            peerGroup.addPeerDiscovery(new SeedPeers(params));
+        } else {
+            for(String host:args){
+                peerGroup.addAddress( InetAddress.getByName( host ));
+            }
+        }
+        
         long now = new Date().getTime() / 1000;
         peerGroup.setFastCatchupTimeSecs(now);
 
