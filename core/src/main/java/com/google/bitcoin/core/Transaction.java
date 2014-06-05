@@ -22,7 +22,6 @@ import com.google.bitcoin.crypto.TransactionSignature;
 import com.google.bitcoin.script.Script;
 import com.google.bitcoin.script.ScriptBuilder;
 import com.google.bitcoin.script.ScriptOpCodes;
-import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -616,8 +615,15 @@ public class Transaction extends ChildMessage implements Serializable, IsMultiBi
             try {
                 Script scriptSig = in.getScriptSig();
                 s.append(scriptSig);
-                s.append(" / ");
-                s.append(in.getOutpoint().toString());
+                s.append("\n          ");
+                s.append("outpoint:");
+                final TransactionOutPoint outpoint = in.getOutpoint();
+                s.append(outpoint.toString());
+                final TransactionOutput connectedOutput = outpoint.getConnectedOutput();
+                if (connectedOutput != null) {
+                    s.append(" hash160:");
+                    s.append(Utils.bytesToHexString(connectedOutput.getScriptPubKey().getPubKeyHash()));
+                }
             } catch (Exception e) {
                 s.append("[exception: ").append(e.getMessage()).append("]");
             }

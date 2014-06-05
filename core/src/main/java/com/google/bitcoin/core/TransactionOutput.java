@@ -177,7 +177,7 @@ public class TransactionOutput extends ChildMessage implements Serializable, IsM
     }
 
     int getIndex() {
-        checkNotNull(parentTransaction);
+        checkNotNull(parentTransaction, "This output is not attached to a parent transaction.");
         for (int i = 0; i < parentTransaction.getOutputs().size(); i++) {
             if (parentTransaction.getOutputs().get(i) == this)
                 return i;
