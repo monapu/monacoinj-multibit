@@ -63,9 +63,10 @@ public class MainNetParams extends NetworkParameters {
         //TODO Get actual Monacoin checkpoints
 
         dnsSeeds = new String[] {
-            "seed.givememona.tk",
-            "dnsseed.monacoin.org",
-                 //TODO Add more...
+           "dnsseed.monacoin.org",
+           "seed.givememona.tk",
+           "api.monaco-ex.org"
+                //TODO Add more...
         };
     }
 
