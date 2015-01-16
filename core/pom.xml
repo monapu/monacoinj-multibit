@@ -22,7 +22,7 @@
     <parent>
         <groupId>com.google</groupId>
         <artifactId>monacoinj-parent</artifactId>
-        <version>0.11.2-MB-ALICE-mona3</version>
+        <version>0.11.2-MB-ALICE-mona4</version>
     </parent>
 
     <artifactId>monacoinj</artifactId>
