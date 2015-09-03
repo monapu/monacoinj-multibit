@@ -34,6 +34,8 @@ public class MainNetParams extends NetworkParameters {
         digishieldTargetTimespan = DIGISHIELD_TARGET_TIMESPAN;
         switchKGWBlock = SWITCH_KGW_BLOCK;
         switchDigishieldBlock = SWITCH_DIGISHIELD_BLOCK;
+        switchDGWV3Block = SWITCH_DGW_V3_BLOCK;
+        switchAlgoLyra2ReV2 = SWITCH_ALGO_LYRA2_RE_V2;
         proofOfWorkLimit = Utils.decodeCompactBits(0x1e0fffffL);
         dumpedPrivateKeyHeader = 178; //This is always addressHeader + 128
         addressHeader = 50;
@@ -47,6 +49,7 @@ public class MainNetParams extends NetworkParameters {
         id = ID_MAINNET;
         subsidyDecreaseBlockCount = 1051200;
         spendableCoinbaseDepth = 100;
+
         String genesisHash = genesisBlock.getHashAsString();
         checkState(genesisHash.equals("ff9f1c0116d19de7c9963845e129f9ed1bfc0b376eb54fd7afa42e0d418c8bb6"),
                    genesisBlock);

@@ -80,6 +80,9 @@ public abstract class NetworkParameters implements Serializable {
     protected int targetTimespan;
     protected int digishieldTargetTimespan;
     protected byte[] alertSigningKey;
+    protected int switchDGWV3Block;
+    protected int switchAlgoLyra2ReV2;
+
 
     /**
      * See getId(). This may be null for old deserialized wallets. In that case we derive it heuristically
@@ -135,6 +138,8 @@ public abstract class NetworkParameters implements Serializable {
     
     public static final int SWITCH_KGW_BLOCK = 80000;
     public static final int SWITCH_DIGISHIELD_BLOCK = 140000;
+    public static final int SWITCH_DGW_V3_BLOCK = 9999999;
+    public static final int SWITCH_ALGO_LYRA2_RE_V2 = 9999999;
 
     /**
      * Blocks with a timestamp after this should enforce BIP 16, aka "Pay to script hash". This BIP changed the
@@ -347,6 +352,14 @@ public abstract class NetworkParameters implements Serializable {
     }
     public int getSwitchDigishieldBlock() {
         return switchDigishieldBlock;
+    }
+
+    public int getSwitchDGWV3Block() {
+        return switchDGWV3Block;
+    }
+
+    public int getSwitchAlgoLyra2ReV2(){
+        return switchAlgoLyra2ReV2;
     }
 
     /** What the easiest allowable proof of work should be. */

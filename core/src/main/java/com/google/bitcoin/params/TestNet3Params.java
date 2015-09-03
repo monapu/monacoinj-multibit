@@ -39,7 +39,11 @@ public class TestNet3Params extends NetworkParameters {
         //switchDigishieldBlock = 300;
         switchKGWBlock = SWITCH_KGW_BLOCK;
         switchDigishieldBlock = SWITCH_DIGISHIELD_BLOCK;
-
+        // switchDGWV3Block = SWITCH_DGW_V3_BLOCK;
+        // switchAlgoLyra2ReV2 = SWITCH_ALGO_LYRA2_RE_V2;
+        switchDGWV3Block = 5;
+        switchAlgoLyra2ReV2 = 5;
+        
         targetTimespan = TARGET_TIMESPAN;
         digishieldTargetTimespan = DIGISHIELD_TARGET_TIMESPAN;
         proofOfWorkLimit = Utils.decodeCompactBits(0x1e0fffffL);
@@ -53,6 +57,7 @@ public class TestNet3Params extends NetworkParameters {
         genesisBlock.setNonce(600389L);
         spendableCoinbaseDepth = 100;  // equivalent to COINBASE_MATURITY ?
         subsidyDecreaseBlockCount = 1051200;
+
         String genesisHash = genesisBlock.getHashAsString();
         // a0d810b45c92ac12e8c5b312a680caafba52216e5d9649b9dd86f7ad6550a43f
         checkState(genesisHash.equals("a0d810b45c92ac12e8c5b312a680caafba52216e5d9649b9dd86f7ad6550a43f"));
