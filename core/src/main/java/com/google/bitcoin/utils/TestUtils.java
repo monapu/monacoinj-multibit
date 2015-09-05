@@ -157,6 +157,7 @@ public class TestUtils {
         try {
             Block chainHead = blockStore.getChainHead().getHeader();
             Address to = new ECKey().toAddress(chainHead.getParams());
+            chainHead.setHeight( blockStore.getChainHead().getHeight() ); // for determine algorithm
             Block b = chainHead.createNextBlock(to, timeSeconds);
             // Coinbase tx was already added.
             for (Transaction tx : transactions) {
@@ -182,7 +183,8 @@ public class TestUtils {
     }
 
     public static Block makeSolvedTestBlock(BlockStore blockStore, Address coinsTo) throws BlockStoreException {
-        Block b = blockStore.getChainHead().getHeader().createNextBlock(coinsTo);
+        int height = blockStore.getChainHead().getHeight();
+        Block b = blockStore.getChainHead().getHeader().createNextBlock(coinsTo,height);
         b.solve();
         return b;
     }

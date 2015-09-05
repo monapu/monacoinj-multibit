@@ -28,6 +28,7 @@ public class BuildCheckpoints {
     public static void main(String[] args) throws Exception {
         BriefLogFormatter.init();
         final NetworkParameters params = MainNetParams.get();
+        // final NetworkParameters params = com.google.bitcoin.params.TestNet3Params.get();
 
         // Sorted map of UNIX time of block to StoredBlock object.
         final TreeMap<Integer, StoredBlock> checkpoints = new TreeMap<Integer, StoredBlock>();

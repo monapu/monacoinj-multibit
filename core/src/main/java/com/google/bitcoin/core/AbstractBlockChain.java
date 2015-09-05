@@ -371,19 +371,7 @@ public abstract class AbstractBlockChain {
                 contentsImportant = contentsImportant || containsRelevantTransactions(block);
             }
 
-            // Prove the block is internally valid: hash is lower than target, etc. This only checks the block contents
-            // if there is a tx sending or receiving coins using an address in one of our wallets. And those transactions
-            // are only lightly verified: presence in a valid connecting block is taken as proof of validity. See the
-            // article here for more details: http://code.google.com/p/bitcoinj/wiki/SecurityModel
-            try {
-                block.verifyHeader();
-                if (contentsImportant)
-                    block.verifyTransactions();
-            } catch (VerificationException e) {
-                log.error("Failed to verify block: ", e);
-                log.error(block.getHashAsString());
-                throw e;
-            }
+
 
             // Try linking it to a place in the currently known blocks.
             StoredBlock storedPrev = getStoredBlockInCurrentScope(block.getPrevBlockHash());
@@ -398,6 +386,22 @@ public abstract class AbstractBlockChain {
                 return false;
             } else {
                 // It connects to somewhere on the chain. Not necessarily the top of the best known chain.
+
+            // Prove the block is internally valid: hash is lower than target, etc. This only checks the block contents
+            // if there is a tx sending or receiving coins using an address in one of our wallets. And those transactions
+            // are only lightly verified: presence in a valid connecting block is taken as proof of validity. See the
+            // article here for more details: http://code.google.com/p/bitcoinj/wiki/SecurityModel
+                // monacoin: We now need block height infomation to determine which algorithm is used.
+                try {
+                    block.verifyHeader(storedPrev.getHeight()+1);
+                    if (contentsImportant)
+                        block.verifyTransactions();
+                } catch (VerificationException e) {
+                    log.error("Failed to verify block: ", e);
+                    log.error(block.getHashAsString());
+                    throw e;
+                }
+                
                 checkDifficultyTransitions(storedPrev, block);
                 connectBlock(block, storedPrev, shouldVerifyTransactions(), filteredTxHashList, filteredTxn);
             }
@@ -1042,7 +1046,7 @@ public abstract class AbstractBlockChain {
         BigInteger PastDifficultyAverage = BigInteger.ZERO;
         BigInteger PastDifficultyAveragePrev = BigInteger.ZERO;
 
-        if (BlockLastSolved == null || BlockLastSolved.getHeight() == 0 || BlockLastSolved.getHeight() < PastBlocksMin) {
+        if (BlockLastSolved == null || BlockLastSolved.getHeight() < params.getSwitchDGWV3Block() + PastBlocksMin) {
             verifyDifficulty(params.getProofOfWorkLimit(), storedPrev, nextBlock);
             return;
         }

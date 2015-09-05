@@ -484,7 +484,7 @@ public class H2FullPrunedBlockStore implements FullPrunedBlockStore {
             BigInteger chainWork = new BigInteger(results.getBytes(1));
             int height = results.getInt(2);
             Block b = new Block(params, results.getBytes(3));
-            b.verifyHeader();
+            b.verifyHeader(height);
             return new StoredBlock(b, chainWork, height);
         } catch (SQLException ex) {
             throw new BlockStoreException(ex);

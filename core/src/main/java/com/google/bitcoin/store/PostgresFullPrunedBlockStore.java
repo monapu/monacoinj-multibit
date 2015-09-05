@@ -518,7 +518,7 @@ public class PostgresFullPrunedBlockStore implements FullPrunedBlockStore {
             BigInteger chainWork = new BigInteger(results.getBytes(1));
             int height = results.getInt(2);
             Block b = new Block(params, results.getBytes(3));
-            b.verifyHeader();
+            b.verifyHeader(height);
             StoredBlock stored = new StoredBlock(b, chainWork, height);
             return stored;
         } catch (SQLException ex) {

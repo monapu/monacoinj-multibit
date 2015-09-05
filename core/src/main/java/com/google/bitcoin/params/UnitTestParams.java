@@ -36,7 +36,7 @@ public class UnitTestParams extends NetworkParameters {
         proofOfWorkLimit = new BigInteger("00ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", 16);
         genesisBlock.setTime(System.currentTimeMillis() / 1000);
         genesisBlock.setDifficultyTarget(Block.EASIEST_DIFFICULTY_TARGET);
-        genesisBlock.solve();
+        genesisBlock.solve(0);
         port = 18333;
         interval = 10;
         dumpedPrivateKeyHeader = 239;
