@@ -138,8 +138,8 @@ public abstract class NetworkParameters implements Serializable {
     
     public static final int SWITCH_KGW_BLOCK = 80000;
     public static final int SWITCH_DIGISHIELD_BLOCK = 140000;
-    public static final int SWITCH_DGW_V3_BLOCK = 9999999;
-    public static final int SWITCH_ALGO_LYRA2_RE_V2 = 9999999;
+    public static final int SWITCH_DGW_V3_BLOCK = 450000;
+    public static final int SWITCH_ALGO_LYRA2_RE_V2 = 450000;
 
     /**
      * Blocks with a timestamp after this should enforce BIP 16, aka "Pay to script hash". This BIP changed the
