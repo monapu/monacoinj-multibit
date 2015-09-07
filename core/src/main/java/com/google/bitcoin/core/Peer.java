@@ -1164,6 +1164,10 @@ public class Peer extends PeerSocketHandler {
         wallets.add(wallet);
     }
 
+    public void addWalletIfAbsent(Wallet wallet) {
+        wallets.addIfAbsent(wallet);
+    }
+
     /** Unlinks the given wallet from peer. See {@link Peer#addWallet(Wallet)}. */
     public void removeWallet(Wallet wallet) {
         wallets.remove(wallet);

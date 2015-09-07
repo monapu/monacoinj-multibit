@@ -730,6 +730,8 @@ public class PeerGroup extends AbstractExecutionThreadService implements Transac
             wallet.setTransactionBroadcaster(this);
             wallet.addEventListener(walletEventListener, Threading.SAME_THREAD);
             addPeerFilterProvider(wallet);
+            for(Peer p:peers)
+                p.addWalletIfAbsent( wallet ); //
         } finally {
             lock.unlock();
         }
