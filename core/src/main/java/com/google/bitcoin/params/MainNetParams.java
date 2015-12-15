@@ -38,6 +38,7 @@ public class MainNetParams extends NetworkParameters {
         switchAlgoLyra2ReV2 = SWITCH_ALGO_LYRA2_RE_V2;
         proofOfWorkLimit = Utils.decodeCompactBits(0x1e0fffffL);
         dumpedPrivateKeyHeader = 178; //This is always addressHeader + 128
+        dumpedPrivateKeyHeaderAlt = 176; // monacoin-qt 0.10.x (not modified from litecoin ...)
         addressHeader = 50;
         p2shHeader = 5; // monacoin-qt のp2sh headerはbitcoinから変更されてないように見える
         acceptableAddressCodes = new int[] { addressHeader };

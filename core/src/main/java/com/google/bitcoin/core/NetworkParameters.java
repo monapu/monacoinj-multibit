@@ -73,6 +73,7 @@ public abstract class NetworkParameters implements Serializable {
     protected int addressHeader;
     protected int p2shHeader;
     protected int dumpedPrivateKeyHeader;
+    protected int dumpedPrivateKeyHeaderAlt;
     protected int interval;
     protected int digishieldInterval;
     protected int switchKGWBlock;
@@ -309,6 +310,10 @@ public abstract class NetworkParameters implements Serializable {
     /** First byte of a base58 encoded dumped private key. See {@link com.google.bitcoin.core.DumpedPrivateKey}. */
     public int getDumpedPrivateKeyHeader() {
         return dumpedPrivateKeyHeader;
+    }
+
+    public int getDumpedPrivateKeyHeaderAlt() {
+        return dumpedPrivateKeyHeaderAlt;
     }
 
     /**
