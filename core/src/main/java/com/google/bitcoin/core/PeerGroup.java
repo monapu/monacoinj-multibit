@@ -100,7 +100,7 @@ public class PeerGroup extends AbstractExecutionThreadService implements Transac
     @GuardedBy("lock") private int maxConnections;
     // Minimum protocol version we will allow ourselves to connect to: require Bloom filtering.
     // TODO: We have to stay at this currently, as 70001 adoption will be too low to rely on it.
-    private volatile int vMinRequiredProtocolVersion = 60003; //MainNetParams.PROTOCOL_VERSION;
+    private volatile int vMinRequiredProtocolVersion = 70003; //MainNetParams.PROTOCOL_VERSION;
 
     // Runs a background thread that we use for scheduling pings to our peers, so we can measure their performance
     // and network latency. We ping peers every pingIntervalMsec milliseconds.
