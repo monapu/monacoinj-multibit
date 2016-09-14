@@ -89,11 +89,28 @@ public class SeedPeers implements PeerDiscovery {
 
     public static int[] seedAddrs =
     {
-        0xa8d6c780,0xcd65b5ca,0x0e33601b,0x2ab4f285,0x2b367999,0x8aebf285,
-        0x9eebf285,0xd536ec68,0x5beef1c0,0x067c4436,0xe809ba36,0x49b5ea36,
-        0xde257899,0x5b337999,0x403c7999,0xba437999,0x4990d431,0x972e073d,
-        0x8aa43a74,0x6a35601b,0x869a079d,0x4fa7d431,0x7889079d,0xddf85edb,
-        0x50e8f285,0x59277899,0x48037899,0xd8edf285,0x50ca85d3,0x59eb5edb,
+
+        0xa8d6c780, // coind.asicpool.info
+        0xcd65b5ca, // vippool.net
+        0x37f875db, // jp.lapool.me
+        0x8d3c2f4e, // static.141.60.47.78.clients.your-server.de
+        0x0f76692e, // fr-db4.suprnova.cc
+        0x540af8a2, // c999942263-cloudpro-255838346.cloudatcost.com
+        0xb14010a0, // tk2-208-13673.vs.sakura.ne.jp
+        0x659e0905, // static.101.158.9.5.clients.your-server.de
+        0x981f7a99, // sub0000527837.hmk-temp.com
+        0x9e113cc7, // nml-cloud-158.cs.sfu.ca
+        0x40092934, // ec2-52-41-9-64.us-west-2.compute.amazonaws.com
+        0xcabd202d, // 45.32.189.202.vultr.com
+        0x891c5c36, // ec2-54-92-28-137.ap-northeast-1.compute.amazonaws.com
+        0x44d7ac4f, // ip-4facd744.taurinet.hu
+        0x88034c90, // static.136.3.76.144.clients.your-server.de
+        0xd45ee968, // is.mnwt.nl
+        0xb5a6d431, // www13167uf.sakura.ne.jp
+        0xd8fec780, // mona2.chainsight.info
+        0x274d88d5, // mail.mai-akcio.eu
+        0x216810a0, // tk2-228-23529.vs.sakura.ne.jp
+        
     };
 
     public void shutdown() {
